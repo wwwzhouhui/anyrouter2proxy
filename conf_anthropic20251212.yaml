@@ -1,0 +1,84 @@
+# LiteLLM Anthropic to OpenAI Protocol Configuration
+# Date: 2025-12-12
+# Purpose: Convert Anthropic protocol requests to OpenAI format
+# Call chain: aa.py (Anthropic SDK) --> LiteLLM Proxy --> OpenAI Backend
+
+## General Settings
+general_settings:
+  master_key: "sk-litellm-anthropic-proxy-2024"
+  disable_spend_logs: true
+
+## Model List Configuration
+# Key: Use openai/ prefix to tell LiteLLM to use OpenAI format for backend calls
+model_list:
+  # Claude Haiku 4.5
+  - model_name: "claude-haiku-4-5-20251001"
+    litellm_params:
+      model: "openai/claude-haiku-4-5-20251001"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+  # Claude 3.5 Haiku
+  - model_name: "claude-3-5-haiku-20241022"
+    litellm_params:
+      model: "openai/claude-3-5-haiku-20241022"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+  # Claude 3.5 Sonnet
+  - model_name: "claude-3-5-sonnet-20241022"
+    litellm_params:
+      model: "openai/claude-3-5-sonnet-20241022"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+  # Claude 3.7 Sonnet
+  - model_name: "claude-3-7-sonnet-20250219"
+    litellm_params:
+      model: "openai/claude-3-7-sonnet-20250219"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+  # Claude Opus 4.5
+  - model_name: "claude-opus-4-5-20251101"
+    litellm_params:
+      model: "openai/claude-opus-4-5-20251101"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+  # Claude Sonnet 4
+  - model_name: "claude-sonnet-4-20250514"
+    litellm_params:
+      model: "openai/claude-sonnet-4-20250514"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+  # Claude Sonnet 4.5
+  - model_name: "claude-sonnet-4-5-20250929"
+    litellm_params:
+      model: "openai/claude-sonnet-4-5-20250929"
+      api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
+      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      custom_llm_provider: "openai"
+
+## LiteLLM Settings
+litellm_settings:
+  drop_params: true
+  request_timeout: 120
+  set_verbose: true
+
+## Router Settings
+router_settings:
+  routing_strategy: "simple-shuffle"
+  allowed_fails: 10
+
+# =============================================================================
+# Usage:
+#   litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0
+# =============================================================================
