@@ -295,6 +295,138 @@ litellm/
 2. **统一 API 接口**：企业内部统一使用一种 API 格式，通过代理转换访问不同的 LLM 服务
 3. **开发测试**：在本地开发时快速切换不同的 LLM 后端
 
-## License
+## 部署实战
 
-MIT
+​    项目整体调用流程图如下
+
+![流程调用图_精美版](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E6%B5%81%E7%A8%8B%E8%B0%83%E7%94%A8%E5%9B%BE_%E7%B2%BE%E7%BE%8E%E7%89%88.png)
+
+   我们可以在render平台上部署anyrouter2openai.py 代码，可以使用docker 方式部署
+
+### render平台部署anyrouter2openai
+
+   下载镜像
+
+```
+docker pull wwwzhouhui569/anyrouter2openai
+```
+
+  登录https://dashboard.render.com
+
+  ![image-20251213114718219](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213114718219.png)
+
+​    
+
+选择一个美国区域
+
+![image-20251213114819090](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213114819090.png)
+
+设置环境变量，填写ANYROUTER_BASE_URL  和 https://anyrouter.top
+
+![image-20251213115003801](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213115003801.png)
+
+ 创建完成后 我的远程端就部署完成了。 当然你也可以自定义域名https://anyrouter2openai.onrender.com/
+
+![image-20251213115122736](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213115122736.png)
+
+通过上面的部署我们就完成了anyrouter2openai 节点的代理部署。
+
+### litellm代理
+
+ 接下来我们使用litellm 在国内服务器上部署conf_anthropic20251212.yaml 实现anthropic 转openai协议
+
+ 我这里使用我火山云服务器首选安装litellm  
+
+```
+ pip install litellm  
+```
+
+ 确保服务器上安装完成litellm
+
+![image-20251213115528379](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213115528379.png)
+
+创建一个litellm文件夹 复制conf_anthropic20251212.yaml 在当前litellm文件夹下。
+
+![image-20251213115633692](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213115633692.png)
+
+启动litellm
+
+```
+nohup litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0 > conf_anthropic20251212.log 2>&1 &
+```
+
+![image-20251213115757310](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213115757310.png)
+
+通过上面的步骤我们完成了litellm启动
+
+### 使用newapi代理
+
+接下来我们使用newapi 这个开源项目配置litellm 代理配置。这个new api  我也是部署在litellm这台机器上（国内机器）
+
+![image-20251213120001533](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213120001533.png)
+
+创建渠道管理-添加渠道
+
+![image-20251213120159613](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213120159613.png)
+
+​     其中秘钥和api地址分别是下面的
+
+![image-20251213120306152](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213120306152.png)
+
+  api地址就是litellm代理发布的地址，我的服务器是115.190.165.156  端口 8088
+
+![image-20251213120435828](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213120435828.png)
+
+  通过上面方式我们就在new api  添加好代理渠道了。
+
+![image-20251213120501765](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213120501765.png)
+
+###     验证测试
+
+#####      cherry studio验证测试
+
+ cherry studio 配置
+
+​     ![image-20251213121818626](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213121818626.png)
+
+ 模型配置详细
+
+![image-20251213121949143](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213121949143.png)
+
+  ![image-20251213122019269](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213122019269.png)
+
+#####    claude code 
+
+​    我们使用cc-switch 配置
+
+   ![image-20251213122232268](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213122232268.png)
+
+ 完成的配置文件
+
+```
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-LYGZYPL2zZhGcRizHRiZv2nEXsuVHeof7LtTsT4OWwkWCFT0",
+    "ANTHROPIC_BASE_URL": "http://115.190.165.156:3000",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5-20251001",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5-20251101",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-4-5-20250929",
+    "ANTHROPIC_MODEL": "claude-haiku-4-5-20251001"
+  }
+}
+```
+
+使用claude code 测试
+
+![image-20251213122442449](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213122442449.png)
+
+  我们在new api 模型调用
+
+  ![image-20251213122537390](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213122537390.png)
+
+原any router上的日志
+
+![image-20251213122627367](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213122627367.png)
+
+ 通过上面的操作步骤我们完成了完整claude code 客户端+litellm +render代理转发+any router全过程。
+
