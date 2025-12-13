@@ -26,7 +26,7 @@ app = FastAPI(title="Anthropic to OpenAI Proxy")
 
 # 配置参数
 OPENAI_API_BASE = "https://renderanyrouter2openai.duckcloud.fun/v1"  # OpenAI 后端地址
-OPENAI_API_KEY = "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"  # API 密钥
+OPENAI_API_KEY = "sk-111111111111111"  # API 密钥
 PROXY_PORT = 8088  # 代理监听端口
 
 # 全局 HTTP 客户端

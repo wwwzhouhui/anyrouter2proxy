@@ -2,6 +2,33 @@
 
 一个用于在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，让你可以使用任意客户端 SDK 访问不同的后端服务。
 
+## 什么是**AnyRouter.top** 
+
+**AnyRouter.top** 是一个提供 API 转发服务的中转站网站
+
+- **用途**：帮助国内用户绕过网络限制，直接通过本地终端（如 VS Code 插件、Cursor 或命令行）调用 Claude 的 API。
+- **现状**：目前该站点常被社区用于“白嫖”或低成本使用 Claude Code 功能
+
+免费的公益站注册地址：https://anyrouter.top/register?aff=XYGH  每天登陆送25美金，可以使用https://github.com/wwwzhouhui/anyrouter-check-in 实现自定登录获取每天25美金积分
+
+另外我们还提供下面的公益站和非公益站大家可以根据自己的需要选择使用
+
+  下面是免费claude glm4.6 gpt5等第三方公益站
+	第二公益站(agentrouter）平台可以抽奖有积分，登陆送25美金
+	https://agentrouter.org/register?aff=u6Z4
+	第三个非公益站 邀请新户送积分，可以充值
+	https://api.codemirror.codes/register?aff=q9ke
+     第四个非公益站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview 模型）
+	https://api.gemai.cc/register?aff=ND9Y
+    第五个中间站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview，有最新的gpt5.2）
+    https://go.geeknow.top/register?aff=EdIn
+
+AnyRouter.top由于网络原因国内访问不方便，另外也不能直接在newapi做代理使用，不能实现api接口的调用，限制比较多。所以本项目借用2次中转和代理实现api接口和claude code 无限白嫖使用。
+
+**免费体验地址**  http://115.190.165.156:3000/
+
+**免费体验api key** :sk-eKU0nC4uERD0OVirefq6VgcD2FCwn7t7lvqy84c9xIQrlD1S    (100美金用完就止)
+
 ## 项目概述
 
 本项目包含多个代理服务和客户端示例，实现了 OpenAI 和 Anthropic API 协议的互相转换：
@@ -406,7 +433,7 @@ nohup litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0 > 
 ```
 {
   "env": {
-    "ANTHROPIC_AUTH_TOKEN": "sk-LYGZYPL2zZhGcRizHRiZv2nEXsuVHeof7LtTsT4OWwkWCFT0",
+    "ANTHROPIC_AUTH_TOKEN": "sk-eKU0nC4uERD0OVirefq6VgcD2FCwn7t7lvqy84c9xIQrlD1S",
     "ANTHROPIC_BASE_URL": "http://115.190.165.156:3000",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5-20251001",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-4-5-20251101",
