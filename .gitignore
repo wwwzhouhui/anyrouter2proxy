@@ -6,3 +6,16 @@
 .ipynb_checkpoints/README-checkpoint.md
 .ipynb_checkpoints/anyrouter2openai-checkpoint.py
 conf_anthropic202512122.yaml
+.claude/settings.local.json
+.data/kv/cookie/46781dafd6564d81b20476fa7ff2c23a
+.ipynb_checkpoints/anthropic_client2-checkpoint.py
+.ipynb_checkpoints/anthropic_client3-checkpoint.py
+.ipynb_checkpoints/anyrouter2anthropic-checkpoint.py
+.ipynb_checkpoints/DOCKER-checkpoint.md
+.ipynb_checkpoints/docker-compose-checkpoint.yml
+.ipynb_checkpoints/docker-compose-dev-checkpoint.yml
+.ipynb_checkpoints/Dockerfile-checkpoint
+.ipynb_checkpoints/requirements-checkpoint.txt
+anthropic_client2.py
+anthropic_client3.py
+.env

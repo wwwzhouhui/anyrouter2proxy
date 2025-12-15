@@ -1,13 +1,19 @@
 """
-AnyRouter2OpenAI - OpenAI 协议代理服务（多账号负载均衡版）
+AnyRouter2Anthropic - Anthropic 协议代理服务（多账号负载均衡版）
 
-将 OpenAI 协议转换为 AnyRouter 的 Anthropic 协议。
-支持多 API Key 负载均衡、健康检查和故障转移。
+将 Anthropic SDK 请求转发到 AnyRouter，添加必要的请求头和元数据。
+支持 Cherry Studio、Anthropic SDK 等工具通过此代理调用 anyrouter.top。
+
+特性：
+- 多 API Key 负载均衡
+- 支持轮询、随机、权重三种策略
+- 账号健康检查和自动故障转移
+- 从 .env 文件读取配置
 
 使用方式：
 1. 配置 .env 文件中的 API_KEYS
-2. 启动代理: python anyrouter2openai.py
-3. 配置客户端 base_url 为: http://localhost:9999
+2. 启动代理: python anyrouter2anthropic.py
+3. 配置客户端 base_url 为: http://localhost:9998
 4. 使用任意字符串作为 api_key（代理会自动选择账号）
 """
 
@@ -27,7 +33,7 @@ from typing import Any
 import httpx
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 
 # 加载 .env 文件
 load_dotenv()
@@ -43,8 +49,6 @@ logger = logging.getLogger(__name__)
 ANYROUTER_BASE_URL = os.getenv("ANYROUTER_BASE_URL", "https://anyrouter.top")
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "120"))
 DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "8192"))
-FORCE_NON_STREAM = os.getenv("FORCE_NON_STREAM", "false").lower() in ("true", "1", "yes")
-DEFAULT_SYSTEM_PROMPT = os.getenv("DEFAULT_SYSTEM_PROMPT", "You are Claude, a helpful AI assistant.")
 
 # 负载均衡配置
 LOAD_BALANCE_STRATEGY = os.getenv("LOAD_BALANCE_STRATEGY", "round_robin")
@@ -182,6 +186,7 @@ def load_accounts_from_env() -> LoadBalancer:
     """从环境变量加载账号"""
     lb = LoadBalancer()
 
+    # 设置策略
     try:
         lb.strategy = LoadBalanceStrategy(LOAD_BALANCE_STRATEGY)
     except ValueError:
@@ -191,6 +196,7 @@ def load_accounts_from_env() -> LoadBalancer:
     lb.max_fail_count = MAX_FAIL_COUNT
     lb.fail_reset_seconds = FAIL_RESET_SECONDS
 
+    # 从 API_KEYS 环境变量读取（逗号分隔）
     api_keys = os.getenv("API_KEYS", "")
     if api_keys:
         for i, key in enumerate(api_keys.split(","), 1):
@@ -231,11 +237,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await http_client.aclose()
 
 
-app = FastAPI(title="AnyRouter OpenAI Proxy", lifespan=lifespan)
-
-
-def generate_request_id() -> str:
-    return f"chatcmpl-{uuid.uuid4().hex[:12]}"
+app = FastAPI(title="AnyRouter Anthropic Proxy", lifespan=lifespan)
 
 
 def generate_user_id() -> str:
@@ -253,250 +255,96 @@ def build_headers(api_key: str) -> dict[str, str]:
     return headers
 
 
-def convert_message_content(content: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """转换消息内容为 Anthropic 格式"""
-    if isinstance(content, str):
-        return [{"type": "text", "text": content}]
-
-    result = []
-    for item in content:
-        if item.get("type") == "text":
-            result.append({"type": "text", "text": item.get("text", "")})
-        elif item.get("type") == "image_url":
-            image_url = item.get("image_url", {})
-            url = image_url.get("url", "")
-            if url.startswith("data:"):
-                media_type, _, base64_data = url.partition(";base64,")
-                media_type = media_type.replace("data:", "")
-                result.append({
-                    "type": "image",
-                    "source": {"type": "base64", "media_type": media_type, "data": base64_data}
-                })
-            else:
-                result.append({"type": "image", "source": {"type": "url", "url": url}})
-    return result if result else [{"type": "text", "text": ""}]
+def ensure_metadata(req: dict[str, Any]) -> dict[str, Any]:
+    if "metadata" not in req:
+        req["metadata"] = {}
+    if "user_id" not in req["metadata"]:
+        req["metadata"]["user_id"] = generate_user_id()
+    return req
 
 
-def convert_openai_to_anthropic(openai_request: dict[str, Any]) -> dict[str, Any]:
-    """将 OpenAI 请求格式转换为 Anthropic 格式"""
-    system_messages: list[dict[str, Any]] = [{
-        "type": "text",
-        "text": DEFAULT_SYSTEM_PROMPT,
-        "cache_control": {"type": "ephemeral"},
-    }]
-    chat_messages: list[dict[str, Any]] = []
-
-    for msg in openai_request.get("messages", []):
-        content = msg.get("content", "")
-        role = msg.get("role", "")
-
-        if role == "system":
-            if isinstance(content, str):
-                system_messages.append({"type": "text", "text": content})
-            else:
-                system_messages.extend(convert_message_content(content))
-        elif role in ("user", "assistant"):
-            chat_messages.append({"role": role, "content": convert_message_content(content)})
-        elif role == "tool":
-            chat_messages.append({"role": "user", "content": convert_message_content(content)})
-
-    anthropic_request: dict[str, Any] = {
-        "model": openai_request.get("model"),
-        "messages": chat_messages,
-        "system": system_messages,
-        "max_tokens": openai_request.get("max_tokens", DEFAULT_MAX_TOKENS),
-        "stream": True,
-        "metadata": {"user_id": generate_user_id()},
-    }
-
-    optional_params = {"temperature": "temperature", "top_p": "top_p", "stop": "stop_sequences"}
-    for openai_key, anthropic_key in optional_params.items():
-        if openai_key in openai_request:
-            anthropic_request[anthropic_key] = openai_request[openai_key]
-
-    return anthropic_request
-
-
-def convert_anthropic_response_to_openai(
-    anthropic_response: dict[str, Any], model: str, request_id: str
-) -> dict[str, Any]:
-    """将 Anthropic 响应转换为 OpenAI 格式"""
-    content = "".join(
-        block.get("text", "") for block in anthropic_response.get("content", [])
-        if block.get("type") == "text"
-    )
-    usage = anthropic_response.get("usage", {})
-    input_tokens = usage.get("input_tokens", 0)
-    output_tokens = usage.get("output_tokens", 0)
-    stop_reason = anthropic_response.get("stop_reason", "")
-    finish_reason = "stop" if stop_reason == "end_turn" else "length"
-
-    return {
-        "id": request_id,
-        "object": "chat.completion",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{"index": 0, "message": {"role": "assistant", "content": content}, "finish_reason": finish_reason}],
-        "usage": {"prompt_tokens": input_tokens, "completion_tokens": output_tokens, "total_tokens": input_tokens + output_tokens},
-    }
-
-
-def create_stream_chunk(request_id: str, model: str, content: str | None = None, finish_reason: str | None = None) -> dict[str, Any]:
-    delta: dict[str, Any] = {}
-    if content is not None:
-        delta["content"] = content
-    return {
-        "id": request_id,
-        "object": "chat.completion.chunk",
-        "created": int(time.time()),
-        "model": model,
-        "choices": [{"index": 0, "delta": delta, "finish_reason": finish_reason}],
-    }
+def ensure_max_tokens(req: dict[str, Any]) -> dict[str, Any]:
+    if "max_tokens" not in req:
+        req["max_tokens"] = DEFAULT_MAX_TOKENS
+    return req
 
 
 async def stream_response(
-    anthropic_request: dict[str, Any],
+    req: dict[str, Any],
     account: Account,
-    headers: dict[str, str],
-    request_id: str,
-    model: str
+    headers: dict[str, str]
 ) -> AsyncGenerator[str, None]:
-    """处理流式响应"""
     client = get_client()
     lb = get_load_balancer()
     success = False
 
     try:
         async with client.stream(
-            "POST", f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request
+            "POST",
+            f"{ANYROUTER_BASE_URL}/v1/messages",
+            headers=headers,
+            json=req
         ) as resp:
             if resp.status_code != 200:
                 error_text = await resp.aread()
                 logger.error("[%s] Error %d: %s", account.name, resp.status_code, error_text.decode()[:200])
                 lb.mark_failure(account)
-                yield f"data: {json.dumps({'error': {'message': error_text.decode(), 'type': 'api_error', 'code': resp.status_code}})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': error_text.decode()}})}\n\n"
                 return
 
             async for line in resp.aiter_lines():
-                if not line or not line.strip() or not line.startswith("data: "):
-                    continue
-
-                try:
-                    event = json.loads(line[6:])
-                    event_type = event.get("type")
-
-                    if event_type == "content_block_delta":
-                        delta = event.get("delta", {})
-                        if delta.get("type") == "text_delta":
-                            chunk = create_stream_chunk(request_id, model, content=delta.get("text", ""))
-                            yield f"data: {json.dumps(chunk)}\n\n"
-                    elif event_type == "message_stop":
-                        chunk = create_stream_chunk(request_id, model, finish_reason="stop")
-                        yield f"data: {json.dumps(chunk)}\n\n"
-                        yield "data: [DONE]\n\n"
-                        success = True
-                    elif event_type == "error":
-                        error_msg = event.get("error", {}).get("message", "Unknown error")
-                        logger.error("[%s] Stream error: %s", account.name, error_msg)
-                        yield f"data: {json.dumps({'error': {'message': error_msg, 'type': 'stream_error'}})}\n\n"
-                except json.JSONDecodeError:
-                    continue
+                yield f"{line}\n" if line else "\n"
+            success = True
 
     except httpx.TimeoutException:
         logger.error("[%s] Timeout", account.name)
         lb.mark_failure(account)
-        yield f"data: {json.dumps({'error': {'message': 'Request timeout', 'type': 'timeout_error'}})}\n\n"
+        yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'timeout_error', 'message': 'Request timeout'}})}\n\n"
     except httpx.HTTPError as e:
         logger.error("[%s] HTTP error: %s", account.name, str(e))
         lb.mark_failure(account)
-        yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'http_error'}})}\n\n"
+        yield f"event: error\ndata: {json.dumps({'type': 'error', 'error': {'type': 'api_error', 'message': str(e)}})}\n\n"
     finally:
         if success:
             lb.mark_success(account)
 
 
-async def stream_from_non_stream(
-    anthropic_request: dict[str, Any],
-    account: Account,
-    headers: dict[str, str],
-    request_id: str,
-    model: str
-) -> AsyncGenerator[str, None]:
-    """非流式后端 + 流式前端"""
-    client = get_client()
-    lb = get_load_balancer()
-
-    try:
-        resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request)
-
-        if resp.status_code != 200:
-            logger.error("[%s] Error %d: %s", account.name, resp.status_code, resp.text[:200])
-            lb.mark_failure(account)
-            yield f"data: {json.dumps({'error': {'message': resp.text, 'type': 'api_error', 'code': resp.status_code}})}\n\n"
-            return
-
-        anthropic_response = resp.json()
-        content = "".join(
-            block.get("text", "") for block in anthropic_response.get("content", [])
-            if block.get("type") == "text"
-        )
-
-        if content:
-            yield f"data: {json.dumps(create_stream_chunk(request_id, model, content=content))}\n\n"
-
-        yield f"data: {json.dumps(create_stream_chunk(request_id, model, finish_reason='stop'))}\n\n"
-        yield "data: [DONE]\n\n"
-        lb.mark_success(account)
-
-    except httpx.TimeoutException:
-        logger.error("[%s] Timeout", account.name)
-        lb.mark_failure(account)
-        yield f"data: {json.dumps({'error': {'message': 'Request timeout', 'type': 'timeout_error'}})}\n\n"
-    except httpx.HTTPError as e:
-        logger.error("[%s] HTTP error: %s", account.name, str(e))
-        lb.mark_failure(account)
-        yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'http_error'}})}\n\n"
-
-
-@app.post("/v1/chat/completions", response_model=None)
-async def chat_completions(request: Request):
-    """OpenAI 兼容的 chat completions 接口"""
+@app.post("/v1/messages")
+async def messages(request: Request):
     lb = get_load_balancer()
     account = lb.select_account()
     if not account:
         raise HTTPException(status_code=503, detail="No available accounts")
 
-    openai_request = await request.json()
-    anthropic_request = convert_openai_to_anthropic(openai_request)
+    try:
+        req = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON")
+
+    req = ensure_metadata(req)
+    req = ensure_max_tokens(req)
     headers = build_headers(account.api_key)
 
-    request_id = generate_request_id()
-    model = openai_request.get("model", "unknown")
-    is_stream = openai_request.get("stream", True)
-
-    use_non_stream_backend = FORCE_NON_STREAM or not is_stream
-    if use_non_stream_backend:
-        anthropic_request['stream'] = False
-
-    logger.info("[%s] %s stream=%s backend_stream=%s", account.name, model, is_stream, not use_non_stream_backend)
+    model = req.get("model", "unknown")
+    is_stream = req.get("stream", False)
+    logger.info("[%s] %s stream=%s", account.name, model, is_stream)
 
     if is_stream:
-        handler = stream_from_non_stream if use_non_stream_backend else stream_response
         return StreamingResponse(
-            handler(anthropic_request, account, headers, request_id, model),
+            stream_response(req, account, headers),
             media_type="text/event-stream",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+            headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
         )
     else:
         client = get_client()
         try:
-            resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request)
+            resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=req)
             if resp.status_code != 200:
                 logger.error("[%s] Error %d", account.name, resp.status_code)
                 lb.mark_failure(account)
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
             lb.mark_success(account)
-            return convert_anthropic_response_to_openai(resp.json(), model, request_id)
+            return JSONResponse(content=resp.json())
         except httpx.TimeoutException:
             lb.mark_failure(account)
             raise HTTPException(status_code=504, detail="Request timeout")
@@ -507,7 +355,6 @@ async def chat_completions(request: Request):
 
 @app.get("/v1/models")
 async def list_models():
-    """列出可用模型"""
     lb = get_load_balancer()
     account = lb.select_account()
     if not account:
@@ -519,7 +366,7 @@ async def list_models():
         resp = await client.get(f"{ANYROUTER_BASE_URL}/v1/models", headers=headers)
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
-        return {"object": "list", "data": resp.json().get("data", [])}
+        return resp.json()
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Request timeout")
     except httpx.HTTPError as e:
@@ -540,7 +387,7 @@ async def stats():
 async def root():
     lb = get_load_balancer()
     return {
-        "service": "AnyRouter OpenAI Proxy",
+        "service": "AnyRouter Anthropic Proxy",
         "upstream": ANYROUTER_BASE_URL,
         "accounts": len(lb.accounts),
         "healthy": len(lb.get_healthy_accounts()),
@@ -551,12 +398,12 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("OPENAI_PROXY_PORT", "9999"))
+    port = int(os.getenv("PORT", "9998"))
     host = os.getenv("HOST", "0.0.0.0")
 
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
-║       AnyRouter OpenAI Proxy (Load Balanced)             ║
+║       AnyRouter Anthropic Proxy (Load Balanced)          ║
 ╠══════════════════════════════════════════════════════════╣
 ║  代理地址: http://{host}:{port}
 ║  上游服务: {ANYROUTER_BASE_URL}

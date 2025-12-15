@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # Anthropic 协议代理服务
+  anthropic-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: anyrouter2proxy:anthropic
+    container_name: anyrouter-anthropic-proxy
+    restart: unless-stopped
+    environment:
+      - RUN_MODE=anthropic
+      - API_KEYS=${API_KEYS}
+      - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
+      - LOAD_BALANCE_STRATEGY=${LOAD_BALANCE_STRATEGY:-round_robin}
+      - MAX_FAIL_COUNT=${MAX_FAIL_COUNT:-3}
+      - FAIL_RESET_SECONDS=${FAIL_RESET_SECONDS:-60}
+      - PORT=${PORT:-9998}
+      - HOST=${HOST:-0.0.0.0}
+      - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}
+      - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-8192}
+    ports:
+      - "9998:9998"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9998/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - anyrouter-proxy
+
+  # OpenAI 协议代理服务
+  openai-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: anyrouter2proxy:openai
+    container_name: anyrouter-openai-proxy
+    restart: unless-stopped
+    environment:
+      - RUN_MODE=openai
+      - API_KEYS=${API_KEYS}
+      - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
+      - LOAD_BALANCE_STRATEGY=${LOAD_BALANCE_STRATEGY:-round_robin}
+      - MAX_FAIL_COUNT=${MAX_FAIL_COUNT:-3}
+      - FAIL_RESET_SECONDS=${FAIL_RESET_SECONDS:-60}
+      - OPENAI_PROXY_PORT=${OPENAI_PROXY_PORT:-9999}
+      - HOST=${HOST:-0.0.0.0}
+      - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}
+      - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-8192}
+      - FORCE_NON_STREAM=${FORCE_NON_STREAM:-false}
+      - DEFAULT_SYSTEM_PROMPT=${DEFAULT_SYSTEM_PROMPT:-You are Claude, a helpful AI assistant.}
+    ports:
+      - "9999:9999"
+    volumes:
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9999/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - anyrouter-proxy
+
+networks:
+  anyrouter-proxy:
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local

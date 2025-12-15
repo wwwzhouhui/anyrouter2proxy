@@ -1,0 +1,18 @@
+# Python 依赖包
+# 核心 Web 框架和服务器
+fastapi==0.116.1
+uvicorn[standard]>=0.35.0
+
+# HTTP 客户端（代理服务核心依赖）
+httpx>=0.28.0
+
+# 环境变量加载
+python-dotenv>=1.1.0
+
+# FastAPI 相关依赖
+pydantic==2.5.3
+python-multipart>=0.0.6
+
+# 可选依赖（如果需要 Web UI 界面）
+# gradio>=5.44.1
+# pillow>=11.3.0

@@ -1,37 +1,12 @@
 # LLM API Protocol Converter Proxy
 
-一个用于在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，让你可以使用任意客户端 SDK 访问不同的后端服务。
-
-## 什么是**AnyRouter.top** 
-
-**AnyRouter.top** 是一个提供 API 转发服务的中转站网站
-
-- **用途**：帮助国内用户绕过网络限制，直接通过本地终端（如 VS Code 插件、Cursor 或命令行）调用 Claude 的 API。
-- **现状**：目前该站点常被社区用于“白嫖”或低成本使用 Claude Code 功能
-
-免费的公益站注册地址：https://anyrouter.top/register?aff=XYGH  每天登陆送25美金，可以使用https://github.com/wwwzhouhui/anyrouter-check-in 实现自定登录获取每天25美金积分
-
-另外我们还提供下面的公益站和非公益站大家可以根据自己的需要选择使用
-
-  下面是免费claude glm4.6 gpt5等第三方公益站
-	第二公益站(agentrouter）平台可以抽奖有积分，登陆送25美金
-	https://agentrouter.org/register?aff=u6Z4
-	第三个非公益站 邀请新户送积分，可以充值
-	https://api.codemirror.codes/register?aff=q9ke
-     第四个非公益站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview 模型）
-	https://api.gemai.cc/register?aff=ND9Y
-    第五个中间站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview，有最新的gpt5.2）
-    https://go.geeknow.top/register?aff=EdIn
-
-AnyRouter.top由于网络原因国内访问不方便，另外也不能直接在newapi做代理使用，不能实现api接口的调用，限制比较多。所以本项目借用2次中转和代理实现api接口和claude code 无限白嫖使用。
-
-**免费体验地址**  http://115.190.165.156:3000/
-
-**免费体验api key** :sk-eKU0nC4uERD0OVirefq6VgcD2FCwn7t7lvqy84c9xIQrlD1S    (100美金用完就止)
+一个用于在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，支持多种部署方式，让你使用任意客户端 SDK 访问不同的后端服务。
 
 ## 项目概述
 
 本项目包含多个代理服务和客户端示例，实现了 OpenAI 和 Anthropic API 协议的互相转换：
+
+### 🏗️ **方案一：基于 LiteLLM + Render 代理转发**（原始方案）
 
 | 文件 | 类型 | 说明 |
 |------|------|------|
@@ -40,6 +15,24 @@ AnyRouter.top由于网络原因国内访问不方便，另外也不能直接在n
 | `conf_anthropic20251212.yaml` | 配置文件 | LiteLLM 代理配置（等同于 anthropic2openai_proxy.py） |
 | `openai_client.py` | 客户端 | OpenAI SDK 调用示例 |
 | `anthropic_client.py` | 客户端 | Anthropic SDK 调用示例 |
+
+### 🚀 **方案二：直接代码代理 + Docker 部署**（新增方案）
+
+| 文件 | 类型 | 说明 |
+|------|------|------|
+| `anyrouter2anthropic.py` | 代理服务 | AnyRouter 直接代理服务（Anthropic 协议） |
+| `anyrouter2openai.py` | 代理服务 | AnyRouter 直接代理服务（OpenAI 协议） |
+| `Dockerfile` | 容器配置 | Docker 镜像构建文件 |
+| `docker-compose.yml` | 编排配置 | Docker Compose 服务编排 |
+| `.env.example` | 环境配置 | 环境变量示例文件 |
+| `DOCKER.md` | 部署文档 | Docker 部署详细指南 |
+
+**🎯 核心优势：**
+- **更简单**：直接代码代理，无需复杂的 LiteLLM 配置
+- **更稳定**：原生 FastAPI + httpx，性能更优
+- **更灵活**：支持多 API Key 负载均衡和故障转移
+- **更容易部署**：一键 Docker Compose 启动
+- **更易维护**：清晰的代码结构和完善的健康检查
 
 ## 代码调用关系图
 
@@ -219,9 +212,185 @@ with client.messages.stream(
         print(text, end="")
 ```
 
+### 4. 场景三：直接代码代理（推荐方案）🌟
+
+#### 优势特点
+- ✅ **零配置**：无需复杂设置，一键启动
+- ✅ **负载均衡**：支持多 API Key 自动轮询
+- ✅ **故障转移**：自动检测并切换不健康的账号
+- ✅ **Docker 部署**：一行命令完成部署
+- ✅ **健康检查**：内置监控和统计接口
+
+#### 快速开始（Docker 部署）
+
+##### 1. 准备环境变量
+
+```bash
+# 复制配置模板
+cp .env.example .env
+
+# 编辑配置文件，填入你的 API Keys
+vim .env
+```
+
+在 `.env` 文件中至少需要配置：
+```bash
+API_KEYS=your_api_key_1,your_api_key_2
+```
+
+##### 2. 启动服务
+
+```bash
+# 拉取镜像（如果还没有）
+docker pull wwwzhouhui569/anyrouter2proxy:latest
+
+# 启动两个代理服务
+docker-compose up -d
+
+# 查看运行状态
+docker-compose ps
+```
+
+##### 3. 测试服务
+
+```bash
+# 测试 Anthropic 代理
+curl http://localhost:9998/health
+
+# 测试 OpenAI 代理
+curl http://localhost:9999/health
+
+# 查看负载均衡统计
+curl http://localhost:9998/stats
+curl http://localhost:9999/stats
+```
+
+#### 手动部署（直接运行 Python）
+
+##### 1. 安装依赖
+
+```bash
+pip install -r requirements.txt
+```
+
+##### 2. 配置环境变量
+
+```bash
+# 设置 AnyRouter API Keys
+export API_KEYS="sk-key1,sk-key2,sk-key3"
+
+# 设置上游服务地址（可选）
+export ANYROUTER_BASE_URL="https://anyrouter.top"
+
+# 设置负载均衡策略（可选：round_robin/random/weighted）
+export LOAD_BALANCE_STRATEGY="round_robin"
+```
+
+##### 3. 启动服务
+
+```bash
+# 启动 Anthropic 协议代理（端口 9998）
+python anyrouter2anthropic.py
+
+# 启动 OpenAI 协议代理（端口 9999）
+python anyrouter2openai.py
+```
+
+#### 客户端使用示例
+
+##### 使用 OpenAI 代理
+
+```python
+import openai
+
+client = openai.OpenAI(
+    api_key="any-string-as-key",  # 任意字符串，代理会忽略
+    base_url="http://localhost:9999/v1"  # OpenAI 代理地址
+)
+
+response = client.chat.completions.create(
+    model="claude-haiku-4-5-20251001",
+    messages=[{"role": "user", "content": "你好"}],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+##### 使用 Anthropic 代理
+
+```python
+import anthropic
+
+client = anthropic.Anthropic(
+    api_key="any-string-as-key",  # 任意字符串，代理会忽略
+    base_url="http://localhost:9998"  # Anthropic 代理地址
+)
+
+response = client.messages.create(
+    model="claude-haiku-4-5-20251001",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "你好"}],
+    stream=True
+)
+
+for chunk in response:
+    if chunk.type == "content_block_delta":
+        print(chunk.delta.text, end="")
+```
+
+#### 环境变量说明
+
+| 变量名 | 必填 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `API_KEYS` | ✅ | - | 多个 AnyRouter API Key，用逗号分隔 |
+| `ANYROUTER_BASE_URL` | ❌ | `https://anyrouter.top` | AnyRouter 服务地址 |
+| `LOAD_BALANCE_STRATEGY` | ❌ | `round_robin` | 负载均衡策略：round_robin/random/weighted |
+| `PORT` | ❌ | `9998` | Anthropic 代理端口 |
+| `OPENAI_PROXY_PORT` | ❌ | `9999` | OpenAI 代理端口 |
+| `HTTP_TIMEOUT` | ❌ | `120` | HTTP 请求超时时间（秒） |
+| `DEFAULT_MAX_TOKENS` | ❌ | `8192` | 默认最大 tokens |
+| `FORCE_NON_STREAM` | ❌ | `false` | 强制非流式模式（解决某些兼容性问题） |
+
 ## 配置说明
 
-### anyrouter2openai.py 配置
+### 方案三：直接代码代理服务配置
+
+#### anyrouter2anthropic.py 配置（端口 9998）
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `API_KEYS` | 必填 | 多个 AnyRouter API Key，用逗号分隔 |
+| `ANYROUTER_BASE_URL` | `https://anyrouter.top` | AnyRouter 后端地址 |
+| `LOAD_BALANCE_STRATEGY` | `round_robin` | 负载均衡策略：round_robin/random/weighted |
+| `PORT` | `9998` | 服务端口 |
+| `HOST` | `0.0.0.0` | 绑定地址 |
+| `HTTP_TIMEOUT` | `120` | HTTP 请求超时时间（秒） |
+| `DEFAULT_MAX_TOKENS` | `8192` | 默认最大 tokens |
+| `MAX_FAIL_COUNT` | `3` | 连续失败多少次标记为不健康 |
+| `FAIL_RESET_SECONDS` | `60` | 不健康账号多少秒后重试 |
+
+#### anyrouter2openai.py 配置（端口 9999）
+
+| 环境变量 | 默认值 | 说明 |
+|---------|--------|------|
+| `API_KEYS` | 必填 | 多个 AnyRouter API Key，用逗号分隔 |
+| `ANYROUTER_BASE_URL` | `https://anyrouter.top` | AnyRouter 后端地址 |
+| `LOAD_BALANCE_STRATEGY` | `round_robin` | 负载均衡策略：round_robin/random/weighted |
+| `OPENAI_PROXY_PORT` | `9999` | 服务端口 |
+| `HOST` | `0.0.0.0` | 绑定地址 |
+| `HTTP_TIMEOUT` | `120` | HTTP 请求超时时间（秒） |
+| `DEFAULT_MAX_TOKENS` | `8192` | 默认最大 tokens |
+| `FORCE_NON_STREAM` | `false` | 强制后端使用非流式请求 |
+| `DEFAULT_SYSTEM_PROMPT` | `You are Claude, a helpful AI assistant.` | 默认系统提示词 |
+| `MAX_FAIL_COUNT` | `3` | 连续失败多少次标记为不健康 |
+| `FAIL_RESET_SECONDS` | `60` | 不健康账号多少秒后重试 |
+
+### 方案一和二：原始方案配置
+
+#### anyrouter2openai.py 配置
 
 | 环境变量 | 默认值 | 说明 |
 |---------|--------|------|
@@ -264,7 +433,31 @@ model_list:
 
 ## API 端点
 
-### anyrouter2openai.py (端口 9999)
+### 方案三：直接代码代理服务
+
+#### anyrouter2anthropic.py (端口 9998)
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/messages` | POST | Anthropic Messages API |
+| `/v1/models` | GET | 列出可用模型 |
+| `/health` | GET | 健康检查 |
+| `/stats` | GET | 负载均衡统计信息 |
+| `/` | GET | 服务信息 |
+
+#### anyrouter2openai.py (端口 9999)
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/chat/completions` | POST | OpenAI Chat Completions API |
+| `/v1/models` | GET | 列出可用模型 |
+| `/health` | GET | 健康检查 |
+| `/stats` | GET | 负载均衡统计信息 |
+| `/` | GET | 服务信息 |
+
+### 方案一和二：原始方案
+
+#### anyrouter2openai.py (端口 9999)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
@@ -272,7 +465,7 @@ model_list:
 | `/v1/models` | GET | 列出可用模型 |
 | `/health` | GET | 健康检查 |
 
-### anthropic2openai_proxy.py (端口 8088)
+#### anthropic2openai_proxy.py (端口 8088)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
@@ -307,18 +500,45 @@ model_list:
 ## 项目结构
 
 ```
-litellm/
-├── anyrouter2openai.py      # OpenAI -> Anthropic 代理 (端口 9999)
-├── anthropic2openai_proxy.py # Anthropic -> OpenAI 代理 (端口 8088)
-├── conf_anthropic20251212.yaml # LiteLLM 配置文件
-├── openai_client.py         # OpenAI SDK 客户端示例
-├── anthropic_client.py      # Anthropic SDK 客户端示例
-└── README.md                # 本文档
+anyrouter2proxy/
+├── # 🏗️ 方案一：LiteLLM + Render 代理转发
+├── anyrouter2openai.py          # OpenAI -> Anthropic 代理 (端口 9999)
+├── anthropic2openai_proxy.py    # Anthropic -> OpenAI 代理 (端口 8088)
+├── conf_anthropic20251212.yaml  # LiteLLM 配置文件
+├── openai_client.py             # OpenAI SDK 客户端示例
+├── anthropic_client.py          # Anthropic SDK 客户端示例
+│
+├── # 🚀 方案二：直接代码代理 + Docker 部署（推荐）
+├── anyrouter2anthropic.py       # AnyRouter 直接代理 (Anthropic 协议，端口 9998)
+├── anyrouter2openai.py          # AnyRouter 直接代理 (OpenAI 协议，端口 9999)
+├── Dockerfile                    # Docker 镜像构建文件
+├── docker-compose.yml           # Docker Compose 服务编排
+├── .env.example                 # 环境变量示例文件
+├── requirements.txt             # Python 依赖包
+├── DOCKER.md                    # Docker 部署详细指南
+│
+└── README.md                    # 本文档
 ```
 
 ## 使用场景
 
-1. **使用熟悉的 SDK**：如果你习惯使用 OpenAI SDK，可以通过 `anyrouter2openai.py` 代理访问 Claude 模型
+### 🚀 方案三：直接代码代理（推荐）
+
+1. **生产环境部署**：使用 Docker Compose 一键部署，支持负载均衡和故障转移
+2. **企业级应用**：需要稳定的 API 服务，支持多账号管理和健康监控
+3. **开发者工具**：本地开发测试，支持快速启动和调试
+4. **高并发场景**：利用 FastAPI + httpx 的高性能异步处理能力
+5. **监控运维**：内置健康检查和统计接口，便于运维监控
+
+### 🏗️ 方案一：LiteLLM + Render 代理转发
+
+1. **快速原型**：无需本地部署，使用 Render 免费托管
+2. **学习研究**：了解 LiteLLM 的配置和使用方式
+3. **简单场景**：只需要基本的协议转换功能
+
+### 通用使用场景
+
+1. **使用熟悉的 SDK**：如果你习惯使用 OpenAI SDK，可以通过代理访问 Claude 模型
 2. **统一 API 接口**：企业内部统一使用一种 API 格式，通过代理转换访问不同的 LLM 服务
 3. **开发测试**：在本地开发时快速切换不同的 LLM 后端
 
@@ -456,4 +676,246 @@ nohup litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0 > 
 ![image-20251213122627367](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20251213122627367.png)
 
  通过上面的操作步骤我们完成了完整claude code 客户端+litellm +render代理转发+any router全过程。
+
+---
+
+## 部署实战：Docker 一键部署（推荐方案）
+
+### 🚀 优势对比
+
+| 特性 | LiteLLM + Render | Docker 直接部署 |
+|------|------------------|-----------------|
+| 部署复杂度 | 高（多步骤配置） | 极简（一键启动） |
+| 负载均衡 | ❌ 不支持 | ✅ 支持多 API Key |
+| 故障转移 | ❌ 不支持 | ✅ 自动切换 |
+| 健康监控 | ❌ 无 | ✅ 完整统计接口 |
+| 性能 | 中等 | 高（异步处理） |
+| 维护成本 | 高 | 低 |
+
+### 📦 Docker 部署步骤
+
+#### 1. 准备环境
+
+```bash
+# 确保已安装 Docker 和 Docker Compose
+docker --version
+docker-compose --version
+
+# 克隆或下载项目
+git clone <your-repo>
+cd anyrouter2proxy
+
+# 复制环境配置
+cp .env.example .env
+```
+
+#### 2. 配置 API Keys
+
+编辑 `.env` 文件：
+
+```bash
+# 必填：AnyRouter API Keys（多个用逗号分隔）
+API_KEYS=sk-key1,sk-key2,sk-key3
+
+# 可选：负载均衡策略
+LOAD_BALANCE_STRATEGY=round_robin  # round_robin/random/weighted
+
+# 可选：服务端口
+PORT=9998
+OPENAI_PROXY_PORT=9999
+
+# 可选：上游服务地址
+ANYROUTER_BASE_URL=https://anyrouter.top
+```
+
+#### 3. 一键启动
+
+```bash
+# 启动所有服务
+docker-compose up -d
+
+# 查看启动状态
+docker-compose ps
+
+# 查看实时日志
+docker-compose logs -f
+```
+
+#### 4. 验证部署
+
+```bash
+# 测试服务健康状态
+curl http://localhost:9998/health
+curl http://localhost:9999/health
+
+# 查看负载均衡统计
+curl http://localhost:9998/stats | jq
+curl http://localhost:9999/stats | jq
+
+# 测试 API 调用
+curl -X POST http://localhost:9998/v1/messages \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer test-key" \
+  -d '{
+    "model": "claude-haiku-4-5-20251001",
+    "max_tokens": 1024,
+    "messages": [{"role": "user", "content": "你好"}]
+  }'
+```
+
+### 🔧 高级配置
+
+#### 生产环境优化
+
+创建生产环境配置 `docker-compose.prod.yml`：
+
+```yaml
+version: '3.8'
+
+services:
+  anthropic-proxy:
+    image: wwwzhouhui569/anyrouter2proxy:latest
+    restart: unless-stopped
+    environment:
+      - RUN_MODE=anthropic
+      - API_KEYS=${API_KEYS}
+      - LOAD_BALANCE_STRATEGY=weighted
+      - MAX_FAIL_COUNT=5
+      - FAIL_RESET_SECONDS=120
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  openai-proxy:
+    image: wwwzhouhui569/anyrouter2proxy:latest
+    restart: unless-stopped
+    environment:
+      - RUN_MODE=openai
+      - API_KEYS=${API_KEYS}
+      - LOAD_BALANCE_STRATEGY=weighted
+      - MAX_FAIL_COUNT=5
+      - FAIL_RESET_SECONDS=120
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+```
+
+#### 使用生产配置启动
+
+```bash
+# 使用生产配置
+docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+# 或创建 .env.prod 文件
+cp .env .env.prod
+# 编辑 .env.prod 配置生产环境参数
+docker-compose --env-file .env.prod up -d
+```
+
+### 📊 监控和运维
+
+#### 查看服务状态
+
+```bash
+# 实时查看服务状态
+docker-compose ps
+
+# 查看资源使用情况
+docker stats
+
+# 查看服务日志
+docker-compose logs anthropic-proxy
+docker-compose logs openai-proxy
+```
+
+#### 负载均衡统计
+
+```bash
+# Anthropic 代理统计
+curl -s http://localhost:9998/stats | python -m json.tool
+
+# OpenAI 代理统计
+curl -s http://localhost:9999/stats | python -m json.tool
+```
+
+#### 更新服务
+
+```bash
+# 拉取最新镜像
+docker-compose pull
+
+# 重新启动服务
+docker-compose up -d
+
+# 清理旧镜像
+docker image prune -f
+```
+
+### 🛠️ 故障排除
+
+#### 常见问题
+
+1. **端口占用**
+```bash
+# 查看端口占用
+netstat -tulpn | grep 9998
+netstat -tulpn | grep 9999
+
+# 修改端口（在 .env 文件中）
+PORT=9998
+OPENAI_PROXY_PORT=9999
+```
+
+2. **API Key 无效**
+```bash
+# 检查日志
+docker-compose logs anthropic-proxy
+docker-compose logs openai-proxy
+
+# 验证 API Keys
+curl -H "Authorization: Bearer YOUR_API_KEY" https://anyrouter.top/v1/models
+```
+
+3. **服务启动失败**
+```bash
+# 查看详细错误
+docker-compose logs
+
+# 重新构建镜像
+docker-compose build --no-cache
+
+# 清理容器和网络
+docker-compose down -v
+docker system prune -f
+```
+
+### 🌟 性能优化建议
+
+1. **合理配置资源限制**
+2. **使用合适的负载均衡策略**
+3. **定期监控服务状态**
+4. **配置日志轮转**
+5. **使用健康检查**
+
+通过 Docker 部署，你可以轻松获得一个稳定、高性能的 LLM 代理服务！
 
