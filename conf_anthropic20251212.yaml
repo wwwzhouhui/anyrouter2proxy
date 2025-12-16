@@ -29,14 +29,14 @@ model_group_list:
         litellm_params:
           model: "openai/claude-haiku-4-5-20251001"
           api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-          api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+          api_key: "sk_aaaaaaaa"
           custom_llm_provider: "openai"
           priority: 1
       - deployment_name: "deployment-2"
         litellm_params:
           model: "openai/claude-haiku-4-5-20251001"
           api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-          api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+          api_key: "sk_bbbbbb"
           custom_llm_provider: "openai"
           priority: 2
       - deployment_name: "deployment-3"
@@ -59,14 +59,14 @@ model_group_list:
         litellm_params:
           model: "openai/claude-3-5-sonnet-20241022"
           api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-          api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+          api_key: "sk_aaaaaaaa"
           custom_llm_provider: "openai"
           priority: 1
       - deployment_name: "deployment-2"
         litellm_params:
           model: "openai/claude-3-5-sonnet-20241022"
           api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-          api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+          api_key: "sk_bbbbbb"
           custom_llm_provider: "openai"
           priority: 2
       - deployment_name: "deployment-3"
@@ -89,14 +89,14 @@ model_group_list:
         litellm_params:
           model: "openai/claude-opus-4-5-20251101"
           api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-          api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+          api_key: "sk_aaaaaaaa"
           custom_llm_provider: "openai"
           priority: 1
       - deployment_name: "deployment-2"
         litellm_params:
           model: "openai/claude-opus-4-5-20251101"
           api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-          api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+          api_key: "sk_bbbbbb"
           custom_llm_provider: "openai"
           priority: 2
       - deployment_name: "deployment-3"
@@ -116,14 +116,14 @@ model_list:
     litellm_params:
       model: "openai/claude-haiku-4-5-20251001"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-haiku-4-5-20251001-key2"
     litellm_params:
       model: "openai/claude-haiku-4-5-20251001"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
   - model_name: "claude-haiku-4-5-20251001-key3"
@@ -138,14 +138,14 @@ model_list:
     litellm_params:
       model: "openai/claude-3-5-haiku-20241022"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-3-5-haiku-20241022-key2"
     litellm_params:
       model: "openai/claude-3-5-haiku-20241022"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
   # Claude 3.5 Sonnet - 多个实例实现负载均衡
@@ -153,14 +153,14 @@ model_list:
     litellm_params:
       model: "openai/claude-3-5-sonnet-20241022"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-3-5-sonnet-20241022-key2"
     litellm_params:
       model: "openai/claude-3-5-sonnet-20241022"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
   # Claude 3.7 Sonnet - 多个实例实现负载均衡
@@ -168,14 +168,14 @@ model_list:
     litellm_params:
       model: "openai/claude-3-7-sonnet-20250219"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-3-7-sonnet-20250219-key2"
     litellm_params:
       model: "openai/claude-3-7-sonnet-20250219"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
   # Claude Opus 4.5 - 多个实例实现负载均衡
@@ -183,14 +183,14 @@ model_list:
     litellm_params:
       model: "openai/claude-opus-4-5-20251101"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-opus-4-5-20251101-key2"
     litellm_params:
       model: "openai/claude-opus-4-5-20251101"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
   # Claude Sonnet 4 - 多个实例实现负载均衡
@@ -198,14 +198,14 @@ model_list:
     litellm_params:
       model: "openai/claude-sonnet-4-20250514"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-sonnet-4-20250514-key2"
     litellm_params:
       model: "openai/claude-sonnet-4-20250514"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
   # Claude Sonnet 4.5 - 多个实例实现负载均衡
@@ -213,14 +213,14 @@ model_list:
     litellm_params:
       model: "openai/claude-sonnet-4-5-20250929"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-tRJ6uQWQRe8JwOkQxyCfkO7SxY9REKjb8sV724bFuNu4Q8j9"
+      api_key: "sk_aaaaaaaa"
       custom_llm_provider: "openai"
 
   - model_name: "claude-sonnet-4-5-20250929-key2"
     litellm_params:
       model: "openai/claude-sonnet-4-5-20250929"
       api_base: "https://renderanyrouter2openai.duckcloud.fun/v1"
-      api_key: "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2"
+      api_key: "sk_bbbbbb"
       custom_llm_provider: "openai"
 
 ## LiteLLM Settings
