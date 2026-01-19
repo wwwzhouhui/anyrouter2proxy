@@ -19,3 +19,4 @@ conf_anthropic202512122.yaml
 anthropic_client2.py
 anthropic_client3.py
 .env
+.ipynb_checkpoints/test_openai_proxy-checkpoint.py

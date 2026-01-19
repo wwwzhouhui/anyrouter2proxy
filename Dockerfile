@@ -2,8 +2,8 @@ FROM python:3.11-slim
 
 # 设置维护者信息
 LABEL maintainer="anyrouter2proxy"
-LABEL version="1.0.0"
-LABEL description="AnyRouter2Proxy - Anthropic/OpenAI Protocol Proxy with Load Balancing"
+LABEL version="2.0.0"
+LABEL description="AnyRouter2Proxy - Anthropic/OpenAI Protocol Proxy (Passthrough Mode)"
 
 # 设置工作目录
 WORKDIR /app
@@ -22,7 +22,6 @@ RUN pip install --no-cache-dir -r requirements.txt -i https://pypi.tuna.tsinghua
 # 复制应用文件
 COPY anyrouter2anthropic.py .
 COPY anyrouter2openai.py .
-COPY .env .env
 
 # 创建非root用户
 RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app

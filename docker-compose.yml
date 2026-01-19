@@ -1,5 +1,9 @@
 version: '3.8'
 
+# AnyRouter2Proxy - 透传模式
+# 客户端必须提供有效的 anyrouter.top API Key
+# 支持多 key 负载均衡（逗号分隔）
+
 services:
   # Anthropic 协议代理服务
   anthropic-proxy:
@@ -8,11 +12,7 @@ services:
     restart: unless-stopped
     environment:
       - RUN_MODE=anthropic
-      - API_KEYS=${API_KEYS}
       - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
-      - LOAD_BALANCE_STRATEGY=${LOAD_BALANCE_STRATEGY:-round_robin}
-      - MAX_FAIL_COUNT=${MAX_FAIL_COUNT:-3}
-      - FAIL_RESET_SECONDS=${FAIL_RESET_SECONDS:-60}
       - PORT=${PORT:-9998}
       - HOST=${HOST:-0.0.0.0}
       - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}
@@ -37,11 +37,7 @@ services:
     restart: unless-stopped
     environment:
       - RUN_MODE=openai
-      - API_KEYS=${API_KEYS}
       - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
-      - LOAD_BALANCE_STRATEGY=${LOAD_BALANCE_STRATEGY:-round_robin}
-      - MAX_FAIL_COUNT=${MAX_FAIL_COUNT:-3}
-      - FAIL_RESET_SECONDS=${FAIL_RESET_SECONDS:-60}
       - OPENAI_PROXY_PORT=${OPENAI_PROXY_PORT:-9999}
       - HOST=${HOST:-0.0.0.0}
       - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}

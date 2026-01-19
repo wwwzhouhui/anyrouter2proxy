@@ -1,14 +1,14 @@
 """
-AnyRouter2OpenAI - OpenAI 协议代理服务（多账号负载均衡版）
+AnyRouter2OpenAI - OpenAI 协议代理服务（透传模式）
 
 将 OpenAI 协议转换为 AnyRouter 的 Anthropic 协议。
-支持多 API Key 负载均衡、健康检查和故障转移。
+支持多 API Key 负载均衡（客户端提供）。
 
 使用方式：
-1. 配置 .env 文件中的 API_KEYS
-2. 启动代理: python anyrouter2openai.py
-3. 配置客户端 base_url 为: http://localhost:9999
-4. 使用任意字符串作为 api_key（代理会自动选择账号）
+1. 启动代理: python anyrouter2openai.py
+2. 配置客户端 base_url 为: http://localhost:9999
+3. 客户端必须提供有效的 anyrouter.top API key
+4. 支持多 key 负载均衡: 用逗号分隔多个 key，如 "sk-key1,sk-key2"
 """
 
 import json
@@ -19,9 +19,8 @@ import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from threading import Lock
 from typing import Any
 
 import httpx
@@ -46,11 +45,6 @@ DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "8192"))
 FORCE_NON_STREAM = os.getenv("FORCE_NON_STREAM", "false").lower() in ("true", "1", "yes")
 DEFAULT_SYSTEM_PROMPT = os.getenv("DEFAULT_SYSTEM_PROMPT", "You are Claude, a helpful AI assistant.")
 
-# 负载均衡配置
-LOAD_BALANCE_STRATEGY = os.getenv("LOAD_BALANCE_STRATEGY", "round_robin")
-MAX_FAIL_COUNT = int(os.getenv("MAX_FAIL_COUNT", "3"))
-FAIL_RESET_SECONDS = float(os.getenv("FAIL_RESET_SECONDS", "60"))
-
 # 公共请求头
 BASE_HEADERS: dict[str, str] = {
     "accept": "application/json",
@@ -63,7 +57,6 @@ class LoadBalanceStrategy(Enum):
     """负载均衡策略"""
     ROUND_ROBIN = "round_robin"
     RANDOM = "random"
-    WEIGHTED = "weighted"
 
 
 @dataclass
@@ -71,141 +64,31 @@ class Account:
     """API 账号"""
     api_key: str
     name: str = ""
-    weight: int = 1
-    enabled: bool = True
-    healthy: bool = True
-    fail_count: int = 0
-    last_fail_time: float = 0
-    total_requests: int = 0
-    successful_requests: int = 0
 
     def __post_init__(self):
         if not self.name:
-            self.name = f"account_{self.api_key[:8]}..."
+            self.name = f"key_{self.api_key[:8]}..."
 
 
-@dataclass
-class LoadBalancer:
-    """负载均衡器"""
-    accounts: list[Account] = field(default_factory=list)
-    strategy: LoadBalanceStrategy = LoadBalanceStrategy.ROUND_ROBIN
-    _rr_index: int = 0
-    _lock: Lock = field(default_factory=Lock)
-    max_fail_count: int = 3
-    fail_reset_seconds: float = 60.0
+class RequestLoadBalancer:
+    """请求级负载均衡器（基于客户端提供的 keys）"""
 
-    def add_account(self, account: Account):
-        self.accounts.append(account)
-        logger.info("Added account: %s", account.name)
-
-    def get_healthy_accounts(self) -> list[Account]:
-        now = time.time()
-        healthy = []
-        for acc in self.accounts:
-            if not acc.enabled:
-                continue
-            if not acc.healthy and (now - acc.last_fail_time) > self.fail_reset_seconds:
-                acc.healthy = True
-                acc.fail_count = 0
-                logger.info("Account %s recovered", acc.name)
-            if acc.healthy:
-                healthy.append(acc)
-        return healthy
+    def __init__(self, api_keys: list[str]):
+        self.accounts = [Account(api_key=k, name=f"key_{i+1}") for i, k in enumerate(api_keys)]
+        self._rr_index = 0
 
     def select_account(self) -> Account | None:
-        healthy = self.get_healthy_accounts()
-        if not healthy:
-            for acc in self.accounts:
-                if acc.enabled:
-                    logger.warning("No healthy accounts, forcing use of %s", acc.name)
-                    return acc
+        if not self.accounts:
             return None
-
-        with self._lock:
-            if self.strategy == LoadBalanceStrategy.ROUND_ROBIN:
-                account = healthy[self._rr_index % len(healthy)]
-                self._rr_index += 1
-                return account
-            elif self.strategy == LoadBalanceStrategy.RANDOM:
-                return random.choice(healthy)
-            elif self.strategy == LoadBalanceStrategy.WEIGHTED:
-                total_weight = sum(acc.weight for acc in healthy)
-                if total_weight == 0:
-                    return random.choice(healthy)
-                r = random.randint(1, total_weight)
-                cumulative = 0
-                for acc in healthy:
-                    cumulative += acc.weight
-                    if r <= cumulative:
-                        return acc
-                return healthy[-1]
-        return healthy[0] if healthy else None
-
-    def mark_success(self, account: Account):
-        account.total_requests += 1
-        account.successful_requests += 1
-        if account.fail_count > 0:
-            account.fail_count = 0
-
-    def mark_failure(self, account: Account):
-        account.total_requests += 1
-        account.fail_count += 1
-        account.last_fail_time = time.time()
-        if account.fail_count >= self.max_fail_count:
-            account.healthy = False
-            logger.warning("Account %s marked unhealthy", account.name)
-
-    def get_stats(self) -> dict[str, Any]:
-        return {
-            "strategy": self.strategy.value,
-            "total_accounts": len(self.accounts),
-            "healthy_accounts": len(self.get_healthy_accounts()),
-            "accounts": [
-                {
-                    "name": acc.name,
-                    "enabled": acc.enabled,
-                    "healthy": acc.healthy,
-                    "fail_count": acc.fail_count,
-                    "total_requests": acc.total_requests,
-                    "successful_requests": acc.successful_requests,
-                    "success_rate": (
-                        f"{acc.successful_requests / acc.total_requests * 100:.1f}%"
-                        if acc.total_requests > 0 else "N/A"
-                    ),
-                }
-                for acc in self.accounts
-            ]
-        }
-
-
-def load_accounts_from_env() -> LoadBalancer:
-    """从环境变量加载账号"""
-    lb = LoadBalancer()
-
-    try:
-        lb.strategy = LoadBalanceStrategy(LOAD_BALANCE_STRATEGY)
-    except ValueError:
-        logger.warning("Unknown strategy '%s', using round_robin", LOAD_BALANCE_STRATEGY)
-        lb.strategy = LoadBalanceStrategy.ROUND_ROBIN
-
-    lb.max_fail_count = MAX_FAIL_COUNT
-    lb.fail_reset_seconds = FAIL_RESET_SECONDS
-
-    api_keys = os.getenv("API_KEYS", "")
-    if api_keys:
-        for i, key in enumerate(api_keys.split(","), 1):
-            key = key.strip()
-            if key:
-                lb.add_account(Account(api_key=key, name=f"账号{i}"))
-
-    if not lb.accounts:
-        logger.warning("No accounts! Set API_KEYS in .env file")
-
-    return lb
+        if len(self.accounts) == 1:
+            return self.accounts[0]
+        # 轮询策略
+        account = self.accounts[self._rr_index % len(self.accounts)]
+        self._rr_index += 1
+        return account
 
 
 # 全局变量
-load_balancer: LoadBalancer | None = None
 http_client: httpx.AsyncClient | None = None
 
 
@@ -215,18 +98,26 @@ def get_client() -> httpx.AsyncClient:
     return http_client
 
 
-def get_load_balancer() -> LoadBalancer:
-    if load_balancer is None:
-        raise RuntimeError("Load balancer not initialized")
-    return load_balancer
+def extract_api_keys(request: Request) -> list[str]:
+    """从请求头提取 API keys（支持逗号分隔的多个 key）"""
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header:
+        return []
+
+    # 移除 Bearer 前缀
+    if auth_header.lower().startswith("bearer "):
+        auth_header = auth_header[7:]
+
+    # 支持逗号分隔的多个 key
+    keys = [k.strip() for k in auth_header.split(",") if k.strip()]
+    return keys
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global http_client, load_balancer
-    load_balancer = load_accounts_from_env()
+    global http_client
     http_client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, verify=False)
-    logger.info("Started: %d accounts, strategy=%s", len(load_balancer.accounts), load_balancer.strategy.value)
+    logger.info("Started: Passthrough mode enabled")
     yield
     await http_client.aclose()
 
@@ -363,8 +254,6 @@ async def stream_response(
 ) -> AsyncGenerator[str, None]:
     """处理流式响应"""
     client = get_client()
-    lb = get_load_balancer()
-    success = False
 
     try:
         async with client.stream(
@@ -373,7 +262,6 @@ async def stream_response(
             if resp.status_code != 200:
                 error_text = await resp.aread()
                 logger.error("[%s] Error %d: %s", account.name, resp.status_code, error_text.decode()[:200])
-                lb.mark_failure(account)
                 yield f"data: {json.dumps({'error': {'message': error_text.decode(), 'type': 'api_error', 'code': resp.status_code}})}\n\n"
                 return
 
@@ -394,7 +282,6 @@ async def stream_response(
                         chunk = create_stream_chunk(request_id, model, finish_reason="stop")
                         yield f"data: {json.dumps(chunk)}\n\n"
                         yield "data: [DONE]\n\n"
-                        success = True
                     elif event_type == "error":
                         error_msg = event.get("error", {}).get("message", "Unknown error")
                         logger.error("[%s] Stream error: %s", account.name, error_msg)
@@ -404,15 +291,10 @@ async def stream_response(
 
     except httpx.TimeoutException:
         logger.error("[%s] Timeout", account.name)
-        lb.mark_failure(account)
         yield f"data: {json.dumps({'error': {'message': 'Request timeout', 'type': 'timeout_error'}})}\n\n"
     except httpx.HTTPError as e:
         logger.error("[%s] HTTP error: %s", account.name, str(e))
-        lb.mark_failure(account)
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'http_error'}})}\n\n"
-    finally:
-        if success:
-            lb.mark_success(account)
 
 
 async def stream_from_non_stream(
@@ -424,14 +306,12 @@ async def stream_from_non_stream(
 ) -> AsyncGenerator[str, None]:
     """非流式后端 + 流式前端"""
     client = get_client()
-    lb = get_load_balancer()
 
     try:
         resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request)
 
         if resp.status_code != 200:
             logger.error("[%s] Error %d: %s", account.name, resp.status_code, resp.text[:200])
-            lb.mark_failure(account)
             yield f"data: {json.dumps({'error': {'message': resp.text, 'type': 'api_error', 'code': resp.status_code}})}\n\n"
             return
 
@@ -446,25 +326,31 @@ async def stream_from_non_stream(
 
         yield f"data: {json.dumps(create_stream_chunk(request_id, model, finish_reason='stop'))}\n\n"
         yield "data: [DONE]\n\n"
-        lb.mark_success(account)
 
     except httpx.TimeoutException:
         logger.error("[%s] Timeout", account.name)
-        lb.mark_failure(account)
         yield f"data: {json.dumps({'error': {'message': 'Request timeout', 'type': 'timeout_error'}})}\n\n"
     except httpx.HTTPError as e:
         logger.error("[%s] HTTP error: %s", account.name, str(e))
-        lb.mark_failure(account)
         yield f"data: {json.dumps({'error': {'message': str(e), 'type': 'http_error'}})}\n\n"
 
 
 @app.post("/v1/chat/completions", response_model=None)
 async def chat_completions(request: Request):
     """OpenAI 兼容的 chat completions 接口"""
-    lb = get_load_balancer()
+    # 提取并验证 API keys
+    api_keys = extract_api_keys(request)
+    if not api_keys:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": {"message": "Authorization header required. Please provide a valid API key.", "type": "authentication_error"}}
+        )
+
+    # 创建请求级负载均衡器
+    lb = RequestLoadBalancer(api_keys)
     account = lb.select_account()
     if not account:
-        raise HTTPException(status_code=503, detail="No available accounts")
+        raise HTTPException(status_code=401, detail={"error": {"message": "Invalid API key", "type": "authentication_error"}})
 
     openai_request = await request.json()
     anthropic_request = convert_openai_to_anthropic(openai_request)
@@ -493,25 +379,28 @@ async def chat_completions(request: Request):
             resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request)
             if resp.status_code != 200:
                 logger.error("[%s] Error %d", account.name, resp.status_code)
-                lb.mark_failure(account)
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
-            lb.mark_success(account)
             return convert_anthropic_response_to_openai(resp.json(), model, request_id)
         except httpx.TimeoutException:
-            lb.mark_failure(account)
             raise HTTPException(status_code=504, detail="Request timeout")
         except httpx.HTTPError as e:
-            lb.mark_failure(account)
             raise HTTPException(status_code=502, detail=str(e))
 
 
 @app.get("/v1/models")
-async def list_models():
+async def list_models(request: Request):
     """列出可用模型"""
-    lb = get_load_balancer()
+    api_keys = extract_api_keys(request)
+    if not api_keys:
+        raise HTTPException(
+            status_code=401,
+            detail={"error": {"message": "Authorization header required", "type": "authentication_error"}}
+        )
+
+    lb = RequestLoadBalancer(api_keys)
     account = lb.select_account()
     if not account:
-        raise HTTPException(status_code=503, detail="No available accounts")
+        raise HTTPException(status_code=401, detail={"error": {"message": "Invalid API key", "type": "authentication_error"}})
 
     headers = build_headers(account.api_key)
     client = get_client()
@@ -528,23 +417,16 @@ async def list_models():
 
 @app.get("/health")
 async def health():
-    return {"status": "ok"}
-
-
-@app.get("/stats")
-async def stats():
-    return get_load_balancer().get_stats()
+    return {"status": "ok", "mode": "passthrough"}
 
 
 @app.get("/")
 async def root():
-    lb = get_load_balancer()
     return {
         "service": "AnyRouter OpenAI Proxy",
+        "mode": "passthrough",
         "upstream": ANYROUTER_BASE_URL,
-        "accounts": len(lb.accounts),
-        "healthy": len(lb.get_healthy_accounts()),
-        "strategy": lb.strategy.value,
+        "description": "Client must provide valid API key(s) in Authorization header",
     }
 
 
@@ -556,16 +438,19 @@ if __name__ == "__main__":
 
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
-║       AnyRouter OpenAI Proxy (Load Balanced)             ║
+║       AnyRouter OpenAI Proxy (Passthrough Mode)          ║
 ╠══════════════════════════════════════════════════════════╣
 ║  代理地址: http://{host}:{port}
 ║  上游服务: {ANYROUTER_BASE_URL}
 ╠══════════════════════════════════════════════════════════╣
-║  配置方法: 编辑 .env 文件                                  ║
-║    API_KEYS=sk-key1,sk-key2,sk-key3                      ║
+║  透传模式: 客户端必须提供有效的 API Key                    ║
+║  负载均衡: 支持多 key (逗号分隔)                          ║
+╠══════════════════════════════════════════════════════════╣
+║  客户端配置示例:                                          ║
+║    单 key:  Authorization: Bearer sk-your-key            ║
+║    多 key:  Authorization: Bearer sk-key1,sk-key2        ║
 ╠══════════════════════════════════════════════════════════╣
 ║  管理接口:                                                ║
-║    GET /stats  - 查看统计                                 ║
 ║    GET /health - 健康检查                                 ║
 ╚══════════════════════════════════════════════════════════╝
 """)
