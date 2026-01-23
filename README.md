@@ -1,77 +1,70 @@
 # LLM API Protocol Converter Proxy
 
-一个用于在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，支持多种部署方式，让你使用任意客户端 SDK 访问不同的后端服务。
+> 在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，支持多种部署方式，让你使用任意客户端 SDK 访问不同的后端服务
 
-## 什么是**AnyRouter.top**
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![FastAPI](https://img.shields.io/badge/fastapi-0.116+-green.svg)
 
-**AnyRouter.top** 是一个提供 API 转发服务的中转站网站
+---
 
-- **用途**：帮助国内用户绕过网络限制，直接通过本地终端（如 VS Code 插件、Cursor 或命令行）调用 Claude 的 API。
-- **现状**：目前该站点常被社区用于"白嫖"或低成本使用 Claude Code 功能
+## 什么是 AnyRouter.top
 
-免费的公益站注册地址：https://anyrouter.top/register?aff=XYGH  每天登陆送25美金，可以使用https://github.com/wwwzhouhui/anyrouter-check-in 实现自定登录获取每天25美金积分
+**AnyRouter.top** 是一个提供 API 转发服务的中转站网站。
 
-另外我们还提供下面的公益站和非公益站大家可以根据自己的需要选择使用
+- **用途**: 帮助国内用户绕过网络限制，直接通过本地终端调用 Claude 的 API
+- **现状**: 常被社区用于低成本使用 Claude Code 功能
 
-  下面是免费claude glm4.6 gpt5等第三方公益站
-	第二公益站(agentrouter）平台可以抽奖有积分，登陆送25美金
-	https://agentrouter.org/register?aff=u6Z4
-	第三个非公益站 邀请新户送积分，可以充值
-	https://api.codemirror.codes/register?aff=q9ke
-     第四个非公益站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview 模型）
-	https://api.gemai.cc/register?aff=ND9Y
-    第五个中间站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview，有最新的gpt5.2）
-    https://go.geeknow.top/register?aff=EdIn
+### 免费体验
 
-​     第六个中间网站，邀请新户送积分，可以充值（有gemini-3-pro-image-preview）
+- **体验地址**: http://115.190.165.156:3000/
+- **体验 Key**: `sk-eKU0nC4uERD0OVirefq6VgcD2FCwn7t7lvqy84c9xIQrlD1S` (100 美金用完即止)
 
-   https://go.geeknow.top/register?aff=EdIn
+### 推荐站点
 
-   第七个付费站（支持sora2）
-
-  https://api.jxincm.cn/register?aff=SeEB
-
-   第八个非公益站，邀请新户送积分，可以充值
-
-   https://api.cpass.cc/register?aff=vkvc
-
-AnyRouter.top由于网络原因国内访问不方便，另外也不能直接在newapi做代理使用，不能实现api接口的调用，限制比较多。所以本项目借用2次中转和代理实现api接口和claude code 无限白嫖使用。
-
-**免费体验地址**  http://115.190.165.156:3000/
-
-**免费体验api key** :sk-eKU0nC4uERD0OVirefq6VgcD2FCwn7t7lvqy84c9xIQrlD1S    (100美金用完就止)
-
-## 项目概述
-
-本项目包含多个代理服务和客户端示例，实现了 OpenAI 和 Anthropic API 协议的互相转换：
-
-### 🚀 **方案一：透传代理模式（推荐）**
-
-| 文件 | 类型 | 说明 |
+| 站点 | 类型 | 特点 |
 |------|------|------|
-| `anyrouter2anthropic.py` | 代理服务 | AnyRouter 透传代理（Anthropic 协议），端口 9998 |
-| `anyrouter2openai.py` | 代理服务 | AnyRouter 透传代理（OpenAI 协议），端口 9999 |
-| `Dockerfile` | 容器配置 | Docker 镜像构建文件 |
-| `docker-compose.yml` | 编排配置 | Docker Compose 服务编排 |
-| `.env.example` | 环境配置 | 环境变量示例文件 |
-| `test_openai_proxy.py` | 测试脚本 | OpenAI 代理测试客户端 |
+| [AnyRouter.top](https://anyrouter.top/register?aff=XYGH) | 公益站 | 每天登录送 25 美金 |
+| [AgentRouter](https://agentrouter.org/register?aff=u6Z4) | 公益站 | 可抽奖、登录送 25 美金 |
+| [CodeMirror](https://api.codemirror.codes/register?aff=q9ke) | 非公益 | 邀请新户送积分 |
+| [GemAI](https://api.gemai.cc/register?aff=ND9Y) | 非公益 | 有 gemini-3-pro-image-preview |
+| [GeekNow](https://go.geeknow.top/register?aff=EdIn) | 非公益 | 有 gemini-3-pro-image-preview、gpt5.2 |
+| [JXinCM](https://api.jxincm.cn/register?aff=SeEB) | 付费 | 支持 Sora2 |
+| [CPass](https://api.cpass.cc/register?aff=vkvc) | 非公益 | 邀请新户送积分 |
 
-**🎯 核心特性：**
-- **透传模式**：客户端必须提供有效的 API Key，服务只做协议转换和中转
-- **多 Key 负载均衡**：客户端可传递多个 Key（逗号分隔），自动轮询
-- **无服务端密钥**：服务端不存储任何 API Key，更安全
-- **简单部署**：一键 Docker Compose 启动
+---
 
-### 🏗️ **方案二：基于 LiteLLM + Render 代理转发**（原始方案）
+## 项目介绍
 
-| 文件 | 类型 | 说明 |
-|------|------|------|
-| `anthropic2openai_proxy.py` | 代理服务 | Anthropic -> OpenAI 协议转换代理 |
-| `conf_anthropic20251212.yaml` | 配置文件 | LiteLLM 代理配置 |
-| `openai_client.py` | 客户端 | OpenAI SDK 调用示例 |
-| `anthropic_client.py` | 客户端 | Anthropic SDK 调用示例 |
+本项目包含多个代理服务和客户端示例，实现了 OpenAI 和 Anthropic API 协议的互相转换。通过双重中转和代理实现 API 接口和 Claude Code 的便捷使用。
 
-## 代码调用关系图
+### 核心特性
+
+- **双向协议转换**: OpenAI ↔ Anthropic 协议互相转换
+- **透传代理模式**: 客户端提供 API Key，服务端只做协议转换
+- **多 Key 负载均衡**: 支持逗号分隔的多个 Key 自动轮询
+- **无服务端密钥**: 不在服务端存储任何 API Key
+- **Docker 一键部署**: 简化部署流程
+
+---
+
+## 功能清单
+
+| 功能名称 | 功能说明 | 技术栈 | 状态 |
+|---------|---------|--------|------|
+| OpenAI → Anthropic 转换 | OpenAI 格式转 Anthropic 格式 | FastAPI + httpx | ✅ 稳定 |
+| Anthropic → OpenAI 转换 | Anthropic 格式转 OpenAI 格式 | FastAPI + httpx | ✅ 稳定 |
+| 透传代理模式 | 客户端 Key 透传，无服务端存储 | FastAPI | ✅ 稳定 |
+| 多 Key 负载均衡 | 自动轮询多个 API Key | Python | ✅ 稳定 |
+| 流式响应支持 | SSE 流式输出 | httpx | ✅ 稳定 |
+| 健康检查 | 内置监控接口 | FastAPI | ✅ 稳定 |
+| LiteLLM 配置支持 | YAML 配置文件 | LiteLLM | ✅ 稳定 |
+
+---
+
+## 调用链路图
+
+### 透传代理模式
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
@@ -89,7 +82,11 @@ AnyRouter.top由于网络原因国内访问不方便，另外也不能直接在n
 │   客户端提供 API Key          格式转换 + Key 透传            /v1/messages       │
 │                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
+```
 
+### Anthropic 协议透传
+
+```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
 │                            Anthropic 协议透传                                    │
 ├─────────────────────────────────────────────────────────────────────────────────┤
@@ -103,22 +100,47 @@ AnyRouter.top由于网络原因国内访问不方便，另外也不能直接在n
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-## 快速开始
+---
 
-### 1. 安装依赖
+## 技术架构
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Python | 3.8+ | 主要开发语言 |
+| FastAPI | 0.116+ | Web 框架 |
+| httpx | 0.28+ | 异步 HTTP 客户端 |
+| Uvicorn | 0.35+ | ASGI 服务器 |
+| Pydantic | 2.5+ | 数据验证 |
+| LiteLLM | latest | 多模型路由 |
+
+---
+
+## 安装说明
+
+### 环境要求
+
+- Python 3.8+
+- pip 包管理器
+
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. 透传代理模式（推荐）🌟
+---
+
+## 使用说明
+
+### 透传代理模式（推荐）
 
 #### 特点
-- ✅ **透传模式**：客户端必须提供有效的 API Key
-- ✅ **多 Key 负载均衡**：支持逗号分隔的多个 Key 自动轮询
-- ✅ **无服务端密钥**：更安全，不在服务端存储任何 Key
-- ✅ **Docker 部署**：一行命令完成部署
-- ✅ **健康检查**：内置监控接口
+
+- ✅ **透传模式**: 客户端必须提供有效的 API Key
+- ✅ **多 Key 负载均衡**: 支持逗号分隔的多个 Key 自动轮询
+- ✅ **无服务端密钥**: 更安全，不在服务端存储任何 Key
+- ✅ **Docker 部署**: 一行命令完成部署
+- ✅ **健康检查**: 内置监控接口
 
 #### 启动服务
 
@@ -130,9 +152,7 @@ python anyrouter2anthropic.py
 python anyrouter2openai.py
 ```
 
-#### 客户端调用示例
-
-##### OpenAI 协议代理
+#### OpenAI 协议代理调用
 
 ```python
 import openai
@@ -153,7 +173,7 @@ for chunk in response:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-##### 多 Key 负载均衡
+#### 多 Key 负载均衡
 
 ```python
 import openai
@@ -165,13 +185,13 @@ client = openai.OpenAI(
 )
 ```
 
-##### Anthropic 协议代理
+#### Anthropic 协议代理调用
 
 ```python
 import anthropic
 
 client = anthropic.Anthropic(
-    api_key="sk-your-anyrouter-api-key",  # 必须提供有效的 API Key
+    api_key="sk-your-anyrouter-api-key",
     base_url="http://localhost:9998"
 )
 
@@ -184,73 +204,11 @@ response = client.messages.create(
 print(response.content[0].text)
 ```
 
-##### cURL 测试
+---
 
-```bash
-# 测试 OpenAI 代理
-curl -X POST http://localhost:9999/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer sk-your-api-key" \
-  -d '{
-    "model": "claude-haiku-4-5-20251001",
-    "messages": [{"role": "user", "content": "你好"}]
-  }'
+## 配置说明
 
-# 测试 Anthropic 代理
-curl -X POST http://localhost:9998/v1/messages \
-  -H "Content-Type: application/json" \
-  -H "x-api-key: sk-your-api-key" \
-  -d '{
-    "model": "claude-haiku-4-5-20251001",
-    "max_tokens": 1024,
-    "messages": [{"role": "user", "content": "你好"}]
-  }'
-
-# 无 Key 测试（预期返回 401）
-curl http://localhost:9999/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{"model": "test", "messages": []}'
-```
-
-### 3. Docker 部署
-
-#### 快速启动
-
-```bash
-# 拉取镜像
-docker pull wwwzhouhui569/anyrouter2proxy:latest
-
-# 启动服务
-docker-compose up -d
-
-# 查看状态
-docker-compose ps
-```
-
-#### 验证服务
-
-```bash
-# 健康检查
-curl http://localhost:9998/health
-curl http://localhost:9999/health
-
-# 服务信息
-curl http://localhost:9998/
-curl http://localhost:9999/
-```
-
-### 4. 使用 LiteLLM 代理（原始方案）
-
-```bash
-# 启动 Anthropic -> OpenAI 协议转换代理
-python anthropic2openai_proxy.py
-# 或使用 LiteLLM
-litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0
-```
-
-## 环境变量说明
-
-### 透传代理配置
+### 环境变量配置
 
 | 变量名 | 必填 | 默认值 | 说明 |
 |--------|------|--------|------|
@@ -261,9 +219,10 @@ litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0
 | `HTTP_TIMEOUT` | ❌ | `120` | HTTP 请求超时时间（秒） |
 | `DEFAULT_MAX_TOKENS` | ❌ | `8192` | 默认最大 tokens |
 | `FORCE_NON_STREAM` | ❌ | `false` | 强制非流式模式 |
-| `DEFAULT_SYSTEM_PROMPT` | ❌ | `You are Claude...` | 默认系统提示词 |
 
-**注意**：透传模式不需要在服务端配置 `API_KEYS`，客户端必须提供有效的 API Key。
+**注意**: 透传模式不需要在服务端配置 `API_KEYS`，客户端必须提供有效的 API Key。
+
+---
 
 ## API 端点
 
@@ -271,8 +230,8 @@ litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/v1/messages` | POST | Anthropic Messages API（需要 x-api-key 或 Authorization） |
-| `/v1/models` | GET | 列出可用模型（需要认证） |
+| `/v1/messages` | POST | Anthropic Messages API |
+| `/v1/models` | GET | 列出可用模型 |
 | `/health` | GET | 健康检查 |
 | `/` | GET | 服务信息 |
 
@@ -280,16 +239,18 @@ litellm --config conf_anthropic20251212.yaml --port 8088 --host 0.0.0.0
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/v1/chat/completions` | POST | OpenAI Chat Completions API（需要 Authorization） |
-| `/v1/models` | GET | 列出可用模型（需要认证） |
+| `/v1/chat/completions` | POST | OpenAI Chat Completions API |
+| `/v1/models` | GET | 列出可用模型 |
 | `/health` | GET | 健康检查 |
 | `/` | GET | 服务信息 |
+
+---
 
 ## 认证方式
 
 ### OpenAI 代理 (9999)
 
-```
+```http
 Authorization: Bearer sk-your-api-key
 # 或多 Key 负载均衡
 Authorization: Bearer sk-key1,sk-key2,sk-key3
@@ -297,7 +258,7 @@ Authorization: Bearer sk-key1,sk-key2,sk-key3
 
 ### Anthropic 代理 (9998)
 
-```
+```http
 x-api-key: sk-your-api-key
 # 或
 Authorization: Bearer sk-your-api-key
@@ -305,22 +266,7 @@ Authorization: Bearer sk-your-api-key
 x-api-key: sk-key1,sk-key2,sk-key3
 ```
 
-## 错误响应
-
-### 未提供 API Key (401)
-
-```json
-{
-  "error": {
-    "message": "Authorization header required. Please provide a valid API key.",
-    "type": "authentication_error"
-  }
-}
-```
-
-### API Key 无效（来自上游）
-
-上游 AnyRouter 返回的错误会被透传给客户端。
+---
 
 ## 支持的模型
 
@@ -333,6 +279,8 @@ x-api-key: sk-key1,sk-key2,sk-key3
 | `claude-opus-4-5-20251101` | Claude Opus 4.5 |
 | `claude-sonnet-4-20250514` | Claude Sonnet 4 |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+
+---
 
 ## 项目结构
 
@@ -349,7 +297,7 @@ anyrouter2proxy/
 ├── requirements.txt             # Python 依赖包
 ├── DOCKER.md                    # Docker 部署详细指南
 │
-├── # 🏗️ LiteLLM + Render 方案
+├── # 🏗️ LiteLLM 方案
 ├── anthropic2openai_proxy.py    # Anthropic -> OpenAI 代理 (端口 8088)
 ├── conf_anthropic20251212.yaml  # LiteLLM 配置文件
 ├── openai_client.py             # OpenAI SDK 客户端示例
@@ -358,25 +306,45 @@ anyrouter2proxy/
 └── README.md                    # 本文档
 ```
 
-## 使用场景
+---
 
-### 🚀 透传代理模式（推荐）
+## 开发指南
 
-1. **安全部署**：不在服务端存储 API Key，每个用户使用自己的 Key
-2. **多租户**：不同用户使用不同的 Key，互不影响
-3. **负载均衡**：单用户多 Key 自动轮询
-4. **协议转换**：使用 OpenAI SDK 调用 Claude 模型
+### 本地开发
 
-### 🏗️ LiteLLM 方案
+```bash
+# 安装依赖
+pip install -r requirements.txt
 
-1. **快速原型**：无需本地部署，使用 Render 免费托管
-2. **学习研究**：了解 LiteLLM 的配置和使用方式
+# 启动 Anthropic 协议代理
+python anyrouter2anthropic.py
 
-## 部署实战
+# 启动 OpenAI 协议代理
+python anyrouter2openai.py
 
-​    项目整体调用流程图如下
+# 测试 OpenAI 代理
+python test_openai_proxy.py
+```
 
-![流程调用图_精美版](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E6%B5%81%E7%A8%8B%E8%B0%83%E7%94%A8%E5%9B%BE_%E7%B2%BE%E7%BE%8E%E7%89%88.png)
+### Docker 开发
+
+```bash
+# 拉取镜像
+docker pull wwwzhouhui569/anyrouter2proxy:latest
+
+# 启动服务
+docker-compose up -d
+
+# 查看状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f
+```
+
+---
+
+## 部署指南
 
 ### Docker 一键部署
 
@@ -420,26 +388,105 @@ curl -X POST http://localhost:9999/v1/chat/completions \
 3. API Key：填入你的 anyrouter.top API Key
 4. 选择模型并开始使用
 
-## 故障排除
+---
 
-### 常见问题
+## 常见问题
 
-1. **401 Unauthorized**
-   - 确保请求头包含有效的 API Key
-   - OpenAI 协议使用 `Authorization: Bearer sk-xxx`
-   - Anthropic 协议使用 `x-api-key: sk-xxx`
+<details>
+<summary>Q: 401 Unauthorized 错误？</summary>
 
-2. **服务无法访问**
-   ```bash
-   # 检查服务状态
-   docker-compose ps
-   docker-compose logs
-   ```
+A: 确保请求头包含有效的 API Key。OpenAI 协议使用 `Authorization: Bearer sk-xxx`，Anthropic 协议使用 `x-api-key: sk-xxx`。
+</details>
 
-3. **上游错误**
-   - 检查 API Key 是否有效
-   - 检查 AnyRouter 服务是否可用
+<details>
+<summary>Q: 服务无法访问？</summary>
+
+A: 检查服务状态：`docker-compose ps` 和 `docker-compose logs`。
+</details>
+
+<details>
+<summary>Q: 上游错误？</summary>
+
+A: 检查 API Key 是否有效，检查 AnyRouter 服务是否可用。
+</details>
+
+<details>
+<summary>Q: 如何使用多个 API Key？</summary>
+
+A: 在客户端将多个 Key 用逗号分隔，如 `sk-key1,sk-key2,sk-key3`，代理会自动轮询。
+</details>
+
+<details>
+<summary>Q: 支持流式响应吗？</summary>
+
+A: 是的，两个代理都完整支持 SSE 流式输出。客户端 SDK 设置 `stream=True` 即可。
+</details>
+
+<details>
+<summary>Q: 如何在服务端配置 API Key？</summary>
+
+A: 透传模式不支持服务端配置 API Key，必须由客户端提供。如需服务端配置，请使用 LiteLLM 方案。
+</details>
 
 ---
 
-通过透传模式，你可以安全、灵活地使用 AnyRouter 代理服务！
+## 使用场景
+
+### 透传代理模式（推荐）
+
+1. **安全部署**: 不在服务端存储 API Key，每个用户使用自己的 Key
+2. **多租户**: 不同用户使用不同的 Key，互不影响
+3. **负载均衡**: 单用户多 Key 自动轮询
+4. **协议转换**: 使用 OpenAI SDK 调用 Claude 模型
+
+### LiteLLM 方案
+
+1. **快速原型**: 无需本地部署，使用 Render 免费托管
+2. **学习研究**: 了解 LiteLLM 的配置和使用方式
+
+---
+
+## 整体调用流程
+
+![调用流程图](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/%E6%B5%81%E7%A8%8B%E8%B0%83%E7%94%A8%E5%9B%BE_%E7%B2%BE%E7%BE%8E%E7%89%88.png)
+
+---
+
+## License
+
+MIT License
+
+---
+
+## 技术交流群
+
+欢迎加入技术交流群，分享你的使用心得和反馈建议：
+
+![技术交流群](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20260122235736120.png)
+
+---
+
+## 作者联系
+
+- **微信**: laohaibao2025
+- **邮箱**: 75271002@qq.com
+
+![微信二维码](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Screenshot_20260123_095617_com.tencent.mm.jpg)
+
+---
+
+## 打赏
+
+如果这个项目对你有帮助，欢迎请我喝杯咖啡 ☕
+
+**微信支付**
+
+![微信支付](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20250914152855543.png)
+
+---
+
+## Star History
+
+如果觉得项目不错，欢迎点个 Star ⭐
+
+[![Star History Chart](https://api.star-history.com/svg?repos=wwwzhouhui/anyrouter2proxy&type=Date)](https://star-history.com/#wwwzhouhui/anyrouter2proxy&Date)
