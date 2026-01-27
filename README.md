@@ -32,6 +32,8 @@
 | [GeekNow](https://go.geeknow.top/register?aff=EdIn) | 非公益 | 有 gemini-3-pro-image-preview、gpt5.2 |
 | [JXinCM](https://api.jxincm.cn/register?aff=SeEB) | 付费 | 支持 Sora2 |
 | [CPass](https://api.cpass.cc/register?aff=vkvc) | 非公益 | 邀请新户送积分 |
+| [GoGoGo公益站](https://api.chengtx.vip/register?aff=r4UI) | 公益站 | 新户送100，每天可签到，gemini-3-pro/flash-preview |
+| [hotaruapi](https://api.hotaruapi.top/register?aff=vOPH) | 非公益 | 新户送20，每天可签到 |
 
 ---
 
