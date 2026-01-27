@@ -6,6 +6,9 @@ uvicorn[standard]>=0.35.0
 # HTTP 客户端（代理服务核心依赖）
 httpx>=0.28.0
 
+# 官方 Anthropic SDK（绕过客户端检测）
+anthropic==0.76.0
+
 # 环境变量加载
 python-dotenv>=1.1.0
 

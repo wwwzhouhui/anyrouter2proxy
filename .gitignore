@@ -23,3 +23,7 @@ anthropic_client3.py
 anyrouter2anthropic_agentrouter.py
 .env.example.agentrouter
 .env.agentrouter
+__pycache__/anyrouter2openai.cpython-310.pyc
+test_agentrouter_proxy.py
+test_agentrouter_proxy.py
+test_openai_proxy.py

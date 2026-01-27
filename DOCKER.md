@@ -1,210 +1,271 @@
 # AnyRouter2Proxy Docker 部署指南
 
+## 架构概览
+
+```
+客户端 → Python 代理 (9998/9999) → Node.js 代理 (4000) → anyrouter.top
+                                         ↑
+                                  官方 Anthropic SDK
+                                  (WAF 绕过 + TLS 指纹)
+```
+
+三个服务通过 Docker 网络互通，Python 代理通过 `NODE_PROXY_URL` 连接 Node.js 代理。
+
+---
+
 ## 快速开始
 
-### 1. 准备环境变量文件
+### 1. 准备配置
 
 ```bash
-# 复制示例配置文件
 cp .env.example .env
-
-# 编辑配置文件，填入你的 API Keys
-vim .env
+# 按需修改 .env 中的配置，默认值即可直接使用
 ```
 
-在 `.env` 文件中至少需要配置：
-```bash
-API_KEYS=your_api_key_1,your_api_key_2
-```
-
-### 2. 使用 Docker Compose 运行（推荐）
+### 2. Docker Compose 部署（推荐）
 
 ```bash
-# 拉取镜像（如果还没有）
-docker pull wwwzhouhui569/anyrouter2proxy:latest
-
-# 启动两个代理服务
+# 生产环境（使用预构建镜像）
 docker-compose up -d
 
-# 查看运行状态
+# 开发环境（本地构建镜像）
+docker-compose -f docker-compose-dev.yml up -d
+
+# 查看状态
 docker-compose ps
 
 # 查看日志
-docker-compose logs -f anthropic-proxy
-docker-compose logs -f openai-proxy
+docker-compose logs -f
 
 # 停止服务
 docker-compose down
 ```
 
-### 3. 单独构建和运行
+启动顺序由 `depends_on` + `service_healthy` 自动保证：
+
+```
+node-proxy (4000) 启动并健康 → anthropic-proxy (9998) + openai-proxy (9999)
+```
+
+### 3. 验证服务
 
 ```bash
-# 拉取已构建的镜像
-docker pull wwwzhouhui569/anyrouter2proxy:latest
+# Node.js 代理
+curl http://localhost:4000/health
 
-# 运行 Anthropic 代理服务
+# Anthropic 代理（含 Node.js 状态）
+curl http://localhost:9998/health
+
+# OpenAI 代理（含 Node.js 状态）
+curl http://localhost:9999/health
+```
+
+---
+
+## 镜像构建
+
+### 构建 Python 代理镜像
+
+```bash
+docker build -t anyrouter2proxy:latest .
+```
+
+### 构建 Node.js 代理镜像
+
+```bash
+docker build -t anyrouter-node-proxy:latest ./node-proxy
+```
+
+### 推送到 Docker Hub
+
+```bash
+docker tag anyrouter2proxy:latest wwwzhouhui569/anyrouter2proxy:latest
+docker tag anyrouter-node-proxy:latest wwwzhouhui569/anyrouter-node-proxy:latest
+
+docker push wwwzhouhui569/anyrouter2proxy:latest
+docker push wwwzhouhui569/anyrouter-node-proxy:latest
+```
+
+---
+
+## Docker Run 单独运行
+
+适用于不使用 docker-compose 的场景，需要手动管理网络和启动顺序。
+
+### 创建网络
+
+```bash
+docker network create anyrouter-proxy
+```
+
+### 启动 Node.js 代理（必须最先启动）
+
+```bash
+docker run -d \
+  --name anyrouter-node-proxy \
+  --network anyrouter-proxy \
+  --restart unless-stopped \
+  -p 4000:4000 \
+  -e NODE_PROXY_PORT=4000 \
+  -e ANYROUTER_BASE_URL=https://anyrouter.top \
+  wwwzhouhui569/anyrouter-node-proxy:latest
+```
+
+### 启动 Anthropic 代理
+
+```bash
 docker run -d \
   --name anyrouter-anthropic-proxy \
+  --network anyrouter-proxy \
+  --restart unless-stopped \
   -p 9998:9998 \
   -e RUN_MODE=anthropic \
-  -e API_KEYS=your_api_keys \
-  wwwzhouhui569/anyrouter2proxy:latest
-
-# 运行 OpenAI 代理服务
-docker run -d \
-  --name anyrouter-openai-proxy \
-  -p 9999:9999 \
-  -e RUN_MODE=openai \
-  -e API_KEYS=your_api_keys \
+  -e NODE_PROXY_URL=http://anyrouter-node-proxy:4000 \
+  -e PORT=9998 \
+  -e HTTP_TIMEOUT=120 \
+  -e DEFAULT_MAX_TOKENS=8192 \
   wwwzhouhui569/anyrouter2proxy:latest
 ```
+
+### 启动 OpenAI 代理
+
+```bash
+docker run -d \
+  --name anyrouter-openai-proxy \
+  --network anyrouter-proxy \
+  --restart unless-stopped \
+  -p 9999:9999 \
+  -e RUN_MODE=openai \
+  -e NODE_PROXY_URL=http://anyrouter-node-proxy:4000 \
+  -e OPENAI_PROXY_PORT=9999 \
+  -e HTTP_TIMEOUT=120 \
+  -e DEFAULT_MAX_TOKENS=8192 \
+  wwwzhouhui569/anyrouter2proxy:latest
+```
+
+### 清理容器
+
+```bash
+docker stop anyrouter-node-proxy anyrouter-anthropic-proxy anyrouter-openai-proxy
+docker rm anyrouter-node-proxy anyrouter-anthropic-proxy anyrouter-openai-proxy
+docker network rm anyrouter-proxy
+```
+
+---
 
 ## 服务访问
 
-- **Anthropic 代理**: http://localhost:9998
-- **OpenAI 代理**: http://localhost:9999
+| 服务 | 地址 | 说明 |
+|------|------|------|
+| Node.js 代理 | http://localhost:4000 | WAF 处理层（内部服务） |
+| Anthropic 代理 | http://localhost:9998 | Anthropic 协议接口 |
+| OpenAI 代理 | http://localhost:9999 | OpenAI 协议接口 |
 
-### API 端点
+---
 
-#### Anthropic 代理 (端口 9998)
-- `GET /` - 服务信息
-- `GET /health` - 健康检查
-- `GET /stats` - 负载均衡统计
-- `GET /v1/models` - 列出可用模型
-- `POST /v1/messages` - 发送消息
+## 环境变量
 
-#### OpenAI 代理 (端口 9999)
-- `GET /` - 服务信息
-- `GET /health` - 健康检查
-- `GET /stats` - 负载均衡统计
-- `GET /v1/models` - 列出可用模型
-- `POST /v1/chat/completions` - 聊天完成
+### Node.js 代理
 
-## 环境变量说明
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `NODE_PROXY_PORT` | `4000` | 监听端口 |
+| `ANYROUTER_BASE_URL` | `https://anyrouter.top` | 上游服务地址 |
 
-| 变量名 | 描述 | 默认值 |
-|--------|------|--------|
-| `API_KEYS` | 多个 API Key，用逗号分隔 | 必填 |
-| `ANYROUTER_BASE_URL` | 上游 AnyRouter 服务地址 | https://anyrouter.top |
-| `LOAD_BALANCE_STRATEGY` | 负载均衡策略 (round_robin/random/weighted) | round_robin |
-| `PORT` | Anthropic 代理端口 | 9998 |
-| `OPENAI_PROXY_PORT` | OpenAI 代理端口 | 9999 |
-| `HOST` | 绑定地址 | 0.0.0.0 |
-| `HTTP_TIMEOUT` | HTTP 请求超时时间(秒) | 120 |
-| `DEFAULT_MAX_TOKENS` | 默认最大 tokens | 8192 |
-| `FORCE_NON_STREAM` | 强制非流式 (OpenAI 代理) | false |
-| `DEFAULT_SYSTEM_PROMPT` | 默认系统提示词 | "You are Claude, a helpful AI assistant." |
+### Python 代理（通用）
 
-## 监控和管理
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `RUN_MODE` | - | `anthropic` 或 `openai`（必填） |
+| `NODE_PROXY_URL` | `http://127.0.0.1:4000` | Node.js 代理地址 |
+| `HOST` | `0.0.0.0` | 绑定地址 |
+| `HTTP_TIMEOUT` | `120` | 请求超时（秒） |
+| `DEFAULT_MAX_TOKENS` | `8192` | 默认最大 tokens |
 
-### 查看服务统计
-```bash
-# Anthropic 代理统计
-curl http://localhost:9998/stats
+### Anthropic 代理专用
 
-# OpenAI 代理统计
-curl http://localhost:9999/stats
-```
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `PORT` | `9998` | 监听端口 |
 
-### 重启服务
-```bash
-docker-compose restart anthropic-proxy
-docker-compose restart openai-proxy
-```
+### OpenAI 代理专用
 
-### 更新服务
-```bash
-# 拉取最新镜像
-docker-compose pull
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `OPENAI_PROXY_PORT` | `9999` | 监听端口 |
+| `FORCE_NON_STREAM` | `false` | 强制非流式后端 |
+| `DEFAULT_SYSTEM_PROMPT` | `You are Claude...` | 默认系统提示词 |
 
-# 重新启动
-docker-compose up -d
-```
+---
 
-## 日志管理
+## 运维管理
 
-日志文件保存在 `./logs` 目录中：
+### 查看日志
 
 ```bash
-# 查看实时日志
+# 全部日志
 docker-compose logs -f
 
-# 查看特定服务日志
+# 单个服务
+docker-compose logs -f node-proxy
 docker-compose logs -f anthropic-proxy
 docker-compose logs -f openai-proxy
 ```
 
+### 重启服务
+
+```bash
+# 重启单个服务
+docker-compose restart node-proxy
+
+# 重启全部
+docker-compose restart
+```
+
+### 更新服务
+
+```bash
+# 拉取最新镜像
+docker-compose pull
+
+# 重启
+docker-compose up -d
+```
+
+---
+
 ## 故障排除
 
-### 1. 容器无法启动
-```bash
-# 检查容器日志
-docker-compose logs anthropic-proxy
-docker-compose logs openai-proxy
+### 容器无法启动
 
-# 检查环境变量
+```bash
+# 检查日志
+docker-compose logs node-proxy
+docker-compose logs anthropic-proxy
+
+# 检查配置
 docker-compose config
 ```
 
-### 2. API 调用失败
-```bash
-# 检查服务状态
-curl http://localhost:9998/health
-curl http://localhost:9999/health
+### health 显示 node_status: unreachable
 
-# 查看统计信息
-curl http://localhost:9998/stats
-curl http://localhost:9999/stats
+Node.js 代理未就绪，检查：
+
+```bash
+# Node.js 代理是否运行
+docker-compose ps node-proxy
+
+# Node.js 代理日志
+docker-compose logs node-proxy
+
+# 直接测试
+curl http://localhost:4000/health
 ```
 
-### 3. 端口冲突
-如果 9998 或 9999 端口被占用，可以修改 `.env` 文件中的端口配置：
+### 端口冲突
+
+修改 `.env` 中的端口配置后重启：
+
 ```bash
-PORT=9998
-OPENAI_PROXY_PORT=9999
-```
-
-然后重新启动服务。
-
-## 生产环境部署
-
-### 1. 使用环境变量文件
-```bash
-# 创建生产环境配置
-cat > .env.prod << EOF
-API_KEYS=your_production_api_keys
-LOAD_BALANCE_STRATEGY=weighted
-MAX_FAIL_COUNT=5
-FAIL_RESET_SECONDS=120
-EOF
-
-# 使用生产配置启动
-docker-compose --env-file .env.prod up -d
-```
-
-### 2. 数据持久化
-```bash
-# 创建数据目录
-mkdir -p logs data
-
-# 在 docker-compose.yml 中添加卷挂载
-volumes:
-  - ./logs:/app/logs
-  - ./data:/app/data
-```
-
-### 3. 资源限制
-在 `docker-compose.yml` 中添加资源限制：
-```yaml
-services:
-  anthropic-proxy:
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+docker-compose down && docker-compose up -d
 ```

@@ -1,25 +1,24 @@
 """
-AnyRouter2Anthropic - Anthropic 协议代理服务（透传模式）
+AnyRouter2Anthropic - Anthropic 协议代理服务（Node.js SDK 中转模式）
 
-将 Anthropic SDK 请求转发到 AnyRouter，添加必要的请求头和元数据。
-支持 Cherry Studio、Anthropic SDK 等工具通过此代理调用 anyrouter.top。
+通过 Node.js 代理层使用官方 Anthropic SDK 转发请求，绕过 WAF 检测。
 
-特性：
-- 透传模式：客户端必须提供有效的 API Key
-- 支持多 key 负载均衡（逗号分隔）
+架构:
+  客户端 → Python 代理 (9998) → Node.js 代理 (4000) → anyrouter.top
+                                      ↑
+                               官方 Node.js SDK
+                               (正确的 TLS 指纹)
 
 使用方式：
-1. 启动代理: python anyrouter2anthropic.py
-2. 配置客户端 base_url 为: http://localhost:9998
-3. 客户端必须提供有效的 anyrouter.top API key
-4. 支持多 key: 用逗号分隔多个 key，如 "sk-key1,sk-key2"
+1. 启动 Node.js 代理: cd node-proxy && npm install && npm start
+2. 启动 Python 代理: python anyrouter2anthropic.py
+3. 配置客户端 base_url 为: http://localhost:9998
 """
 
 import json
 import logging
 import os
 import random
-import time
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -42,16 +41,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 从环境变量读取配置
-ANYROUTER_BASE_URL = os.getenv("ANYROUTER_BASE_URL", "https://anyrouter.top")
+NODE_PROXY_URL = os.getenv("NODE_PROXY_URL", "http://127.0.0.1:4000")
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "120"))
 DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "8192"))
-
-# 公共请求头
-BASE_HEADERS: dict[str, str] = {
-    "accept": "application/json",
-    "content-type": "application/json",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-}
 
 
 @dataclass
@@ -77,13 +69,12 @@ class RequestLoadBalancer:
             return None
         if len(self.accounts) == 1:
             return self.accounts[0]
-        # 轮询策略
         account = self.accounts[self._rr_index % len(self.accounts)]
         self._rr_index += 1
         return account
 
 
-# 全局变量
+# 全局 HTTP 客户端
 http_client: httpx.AsyncClient | None = None
 
 
@@ -94,11 +85,9 @@ def get_client() -> httpx.AsyncClient:
 
 
 def extract_api_keys(request: Request) -> list[str]:
-    """从请求头提取 API keys（支持逗号分隔的多个 key）"""
-    # 优先从 x-api-key header 获取（Anthropic SDK 风格）
+    """从请求头提取 API keys"""
     api_key = request.headers.get("x-api-key", "")
     if not api_key:
-        # 回退到 Authorization header（Bearer token 风格）
         auth_header = request.headers.get("authorization", "")
         if auth_header.lower().startswith("bearer "):
             api_key = auth_header[7:]
@@ -106,36 +95,14 @@ def extract_api_keys(request: Request) -> list[str]:
     if not api_key:
         return []
 
-    # 支持逗号分隔的多个 key
     keys = [k.strip() for k in api_key.split(",") if k.strip()]
     return keys
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    global http_client
-    http_client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, verify=False)
-    logger.info("Started: Passthrough mode enabled")
-    yield
-    await http_client.aclose()
-
-
-app = FastAPI(title="AnyRouter Anthropic Proxy", lifespan=lifespan)
 
 
 def generate_user_id() -> str:
     user_hash = ''.join(random.choices('0123456789abcdef', k=64))
     session_uuid = uuid.uuid4()
     return f"user_{user_hash}_account__session_{session_uuid}"
-
-
-def build_headers(api_key: str) -> dict[str, str]:
-    headers = BASE_HEADERS.copy()
-    if api_key.startswith("Bearer "):
-        headers["authorization"] = api_key
-    else:
-        headers["authorization"] = f"Bearer {api_key}"
-    return headers
 
 
 def ensure_metadata(req: dict[str, Any]) -> dict[str, Any]:
@@ -152,17 +119,35 @@ def ensure_max_tokens(req: dict[str, Any]) -> dict[str, Any]:
     return req
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    global http_client
+    http_client = httpx.AsyncClient(timeout=HTTP_TIMEOUT)
+    logger.info("Started: Node.js SDK proxy mode enabled")
+    logger.info("Node.js proxy URL: %s", NODE_PROXY_URL)
+    yield
+    await http_client.aclose()
+
+
+app = FastAPI(title="AnyRouter Anthropic Proxy (Node.js SDK Mode)", lifespan=lifespan)
+
+
 async def stream_response(
     req: dict[str, Any],
     account: Account,
-    headers: dict[str, str]
 ) -> AsyncGenerator[str, None]:
+    """转发流式请求到 Node.js 代理"""
     client = get_client()
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": account.api_key,
+    }
 
     try:
         async with client.stream(
             "POST",
-            f"{ANYROUTER_BASE_URL}/v1/messages",
+            f"{NODE_PROXY_URL}/v1/messages",
             headers=headers,
             json=req
         ) as resp:
@@ -173,7 +158,10 @@ async def stream_response(
                 return
 
             async for line in resp.aiter_lines():
-                yield f"{line}\n" if line else "\n"
+                if line:
+                    yield f"{line}\n"
+                else:
+                    yield "\n"
 
     except httpx.TimeoutException:
         logger.error("[%s] Timeout", account.name)
@@ -190,10 +178,9 @@ async def messages(request: Request):
     if not api_keys:
         raise HTTPException(
             status_code=401,
-            detail={"type": "error", "error": {"type": "authentication_error", "message": "API key required. Please provide x-api-key header or Authorization: Bearer <key>"}}
+            detail={"type": "error", "error": {"type": "authentication_error", "message": "API key required"}}
         )
 
-    # 创建请求级负载均衡器
     lb = RequestLoadBalancer(api_keys)
     account = lb.select_account()
     if not account:
@@ -206,26 +193,37 @@ async def messages(request: Request):
 
     req = ensure_metadata(req)
     req = ensure_max_tokens(req)
-    headers = build_headers(account.api_key)
 
     model = req.get("model", "unknown")
     is_stream = req.get("stream", False)
-    logger.info("[%s] %s stream=%s", account.name, model, is_stream)
+    logger.info("[%s] %s stream=%s (via Node.js)", account.name, model, is_stream)
 
     if is_stream:
         return StreamingResponse(
-            stream_response(req, account, headers),
+            stream_response(req, account),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
         )
     else:
         client = get_client()
+        headers = {
+            "Content-Type": "application/json",
+            "x-api-key": account.api_key,
+        }
+
         try:
-            resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=req)
+            resp = await client.post(
+                f"{NODE_PROXY_URL}/v1/messages",
+                headers=headers,
+                json=req
+            )
+
             if resp.status_code != 200:
-                logger.error("[%s] Error %d", account.name, resp.status_code)
+                logger.error("[%s] Error %d: %s", account.name, resp.status_code, resp.text[:200])
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
             return JSONResponse(content=resp.json())
+
         except httpx.TimeoutException:
             raise HTTPException(status_code=504, detail="Request timeout")
         except httpx.HTTPError as e:
@@ -234,43 +232,44 @@ async def messages(request: Request):
 
 @app.get("/v1/models")
 async def list_models(request: Request):
-    api_keys = extract_api_keys(request)
-    if not api_keys:
-        raise HTTPException(
-            status_code=401,
-            detail={"type": "error", "error": {"type": "authentication_error", "message": "API key required"}}
-        )
-
-    lb = RequestLoadBalancer(api_keys)
-    account = lb.select_account()
-    if not account:
-        raise HTTPException(status_code=401, detail={"type": "error", "error": {"type": "authentication_error", "message": "Invalid API key"}})
-
-    headers = build_headers(account.api_key)
-    client = get_client()
-    try:
-        resp = await client.get(f"{ANYROUTER_BASE_URL}/v1/models", headers=headers)
-        if resp.status_code != 200:
-            raise HTTPException(status_code=resp.status_code, detail=resp.text)
-        return resp.json()
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=504, detail="Request timeout")
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+    """列出可用模型"""
+    models = [
+        {"id": "claude-opus-4-5-20251101", "name": "Claude Opus 4.5"},
+        {"id": "claude-sonnet-4-5-20250929", "name": "Claude Sonnet 4.5"},
+        {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4"},
+        {"id": "claude-haiku-4-5-20251001", "name": "Claude Haiku 4.5"},
+        {"id": "claude-3-7-sonnet-20250219", "name": "Claude 3.7 Sonnet"},
+        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet"},
+        {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku"},
+    ]
+    return {"data": models}
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "mode": "passthrough"}
+    # 检查 Node.js 代理是否可用
+    try:
+        client = get_client()
+        resp = await client.get(f"{NODE_PROXY_URL}/health", timeout=5)
+        node_status = resp.json() if resp.status_code == 200 else {"status": "error"}
+    except Exception:
+        node_status = {"status": "unreachable"}
+
+    return {
+        "status": "ok",
+        "mode": "node-proxy",
+        "node_proxy": NODE_PROXY_URL,
+        "node_status": node_status,
+    }
 
 
 @app.get("/")
 async def root():
     return {
         "service": "AnyRouter Anthropic Proxy",
-        "mode": "passthrough",
-        "upstream": ANYROUTER_BASE_URL,
-        "description": "Client must provide valid API key(s) via x-api-key header or Authorization: Bearer",
+        "mode": "node-proxy",
+        "node_proxy_url": NODE_PROXY_URL,
+        "description": "Forwarding requests to Node.js proxy (using official Anthropic SDK)",
     }
 
 
@@ -282,20 +281,20 @@ if __name__ == "__main__":
 
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
-║       AnyRouter Anthropic Proxy (Passthrough Mode)       ║
+║     AnyRouter Anthropic Proxy (Node.js SDK Mode)         ║
 ╠══════════════════════════════════════════════════════════╣
-║  代理地址: http://{host}:{port}
-║  上游服务: {ANYROUTER_BASE_URL}
+║  Python 代理: http://{host}:{port}
+║  Node.js 代理: {NODE_PROXY_URL}
 ╠══════════════════════════════════════════════════════════╣
-║  透传模式: 客户端必须提供有效的 API Key                    ║
-║  负载均衡: 支持多 key (逗号分隔)                          ║
+║  架构:                                                    ║
+║    客户端 → Python (9998) → Node.js (4000) → anyrouter   ║
 ╠══════════════════════════════════════════════════════════╣
-║  客户端配置示例:                                          ║
-║    x-api-key: sk-your-key                                ║
-║    或 Authorization: Bearer sk-key1,sk-key2              ║
+║  启动步骤:                                                ║
+║    1. cd node-proxy && npm install && npm start          ║
+║    2. python anyrouter2anthropic.py                      ║
 ╠══════════════════════════════════════════════════════════╣
 ║  管理接口:                                                ║
-║    GET /health - 健康检查                                 ║
+║    GET /health - 健康检查（含 Node.js 状态）              ║
 ╚══════════════════════════════════════════════════════════╝
 """)
 

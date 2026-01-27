@@ -1,29 +1,51 @@
 version: '3.8'
 
-# AnyRouter2Proxy - 透传模式（开发环境）
-# 客户端必须提供有效的 anyrouter.top API Key
-# 支持多 key 负载均衡（逗号分隔）
+# AnyRouter2Proxy - Node.js SDK 模式（开发环境）
+# 架构: 客户端 → Python (9998/9999) → Node.js (4000) → anyrouter.top
 
 services:
+  # Node.js 代理（核心，处理 WAF 和 TLS 指纹）
+  node-proxy:
+    build:
+      context: ./node-proxy
+      dockerfile: Dockerfile
+    image: anyrouter-node-proxy:dev
+    container_name: anyrouter-node-proxy
+    restart: unless-stopped
+    environment:
+      - NODE_PROXY_PORT=${NODE_PROXY_PORT:-4000}
+      - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - anyrouter-proxy
+
   # Anthropic 协议代理服务
   anthropic-proxy:
     build:
       context: .
       dockerfile: Dockerfile
-    image: anyrouter2proxy:anthropic
+    image: anyrouter2proxy:anthropic-dev
     container_name: anyrouter-anthropic-proxy
     restart: unless-stopped
+    depends_on:
+      node-proxy:
+        condition: service_healthy
     environment:
       - RUN_MODE=anthropic
-      - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
+      - NODE_PROXY_URL=http://node-proxy:4000
       - PORT=${PORT:-9998}
       - HOST=${HOST:-0.0.0.0}
       - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}
       - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-8192}
     ports:
       - "9998:9998"
-    volumes:
-      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9998/health"]
       interval: 30s
@@ -38,12 +60,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: anyrouter2proxy:openai
+    image: anyrouter2proxy:openai-dev
     container_name: anyrouter-openai-proxy
     restart: unless-stopped
+    depends_on:
+      node-proxy:
+        condition: service_healthy
     environment:
       - RUN_MODE=openai
-      - ANYROUTER_BASE_URL=${ANYROUTER_BASE_URL:-https://anyrouter.top}
+      - NODE_PROXY_URL=http://node-proxy:4000
       - OPENAI_PROXY_PORT=${OPENAI_PROXY_PORT:-9999}
       - HOST=${HOST:-0.0.0.0}
       - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}
@@ -52,8 +77,6 @@ services:
       - DEFAULT_SYSTEM_PROMPT=${DEFAULT_SYSTEM_PROMPT:-You are Claude, a helpful AI assistant.}
     ports:
       - "9999:9999"
-    volumes:
-      - ./logs:/app/logs
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9999/health"]
       interval: 30s
@@ -66,7 +89,3 @@ services:
 networks:
   anyrouter-proxy:
     driver: bridge
-
-volumes:
-  logs:
-    driver: local

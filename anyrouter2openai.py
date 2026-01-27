@@ -1,13 +1,19 @@
 """
-AnyRouter2OpenAI - OpenAI 协议代理服务（透传模式）
+AnyRouter2OpenAI - OpenAI 协议代理服务（Node.js SDK 中转模式）
 
-将 OpenAI 协议转换为 AnyRouter 的 Anthropic 协议。
+将 OpenAI 协议转换为 Anthropic 协议，通过 Node.js 代理层转发请求。
 支持多 API Key 负载均衡（客户端提供）。
 
+架构:
+  客户端 → Python 代理 (9999) → Node.js 代理 (4000) → anyrouter.top
+                                      ↑
+                               官方 Node.js SDK
+                               (正确的 TLS 指纹)
+
 使用方式：
-1. 启动代理: python anyrouter2openai.py
-2. 配置客户端 base_url 为: http://localhost:9999
-3. 客户端必须提供有效的 anyrouter.top API key
+1. 启动 Node.js 代理: cd node-proxy && npm install && npm start
+2. 启动 Python 代理: python anyrouter2openai.py
+3. 配置客户端 base_url 为: http://localhost:9999
 4. 支持多 key 负载均衡: 用逗号分隔多个 key，如 "sk-key1,sk-key2"
 """
 
@@ -20,7 +26,6 @@ import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from enum import Enum
 from typing import Any
 
 import httpx
@@ -39,24 +44,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 从环境变量读取配置
-ANYROUTER_BASE_URL = os.getenv("ANYROUTER_BASE_URL", "https://anyrouter.top")
+NODE_PROXY_URL = os.getenv("NODE_PROXY_URL", "http://127.0.0.1:4000")
 HTTP_TIMEOUT = float(os.getenv("HTTP_TIMEOUT", "120"))
 DEFAULT_MAX_TOKENS = int(os.getenv("DEFAULT_MAX_TOKENS", "8192"))
 FORCE_NON_STREAM = os.getenv("FORCE_NON_STREAM", "false").lower() in ("true", "1", "yes")
 DEFAULT_SYSTEM_PROMPT = os.getenv("DEFAULT_SYSTEM_PROMPT", "You are Claude, a helpful AI assistant.")
-
-# 公共请求头
-BASE_HEADERS: dict[str, str] = {
-    "accept": "application/json",
-    "content-type": "application/json",
-    "Accept-Encoding": "gzip, deflate, br, zstd",
-}
-
-
-class LoadBalanceStrategy(Enum):
-    """负载均衡策略"""
-    ROUND_ROBIN = "round_robin"
-    RANDOM = "random"
 
 
 @dataclass
@@ -116,13 +108,14 @@ def extract_api_keys(request: Request) -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global http_client
-    http_client = httpx.AsyncClient(timeout=HTTP_TIMEOUT, verify=False)
-    logger.info("Started: Passthrough mode enabled")
+    http_client = httpx.AsyncClient(timeout=HTTP_TIMEOUT)
+    logger.info("Started: Node.js SDK proxy mode enabled")
+    logger.info("Node.js proxy URL: %s", NODE_PROXY_URL)
     yield
     await http_client.aclose()
 
 
-app = FastAPI(title="AnyRouter OpenAI Proxy", lifespan=lifespan)
+app = FastAPI(title="AnyRouter OpenAI Proxy (Node.js SDK Mode)", lifespan=lifespan)
 
 
 def generate_request_id() -> str:
@@ -136,12 +129,11 @@ def generate_user_id() -> str:
 
 
 def build_headers(api_key: str) -> dict[str, str]:
-    headers = BASE_HEADERS.copy()
-    if api_key.startswith("Bearer "):
-        headers["authorization"] = api_key
-    else:
-        headers["authorization"] = f"Bearer {api_key}"
-    return headers
+    """构建请求头（简化版，复杂头部由 Node.js 代理处理）"""
+    return {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+    }
 
 
 def convert_message_content(content: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -257,7 +249,7 @@ async def stream_response(
 
     try:
         async with client.stream(
-            "POST", f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request
+            "POST", f"{NODE_PROXY_URL}/v1/messages", headers=headers, json=anthropic_request
         ) as resp:
             if resp.status_code != 200:
                 error_text = await resp.aread()
@@ -308,7 +300,7 @@ async def stream_from_non_stream(
     client = get_client()
 
     try:
-        resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request)
+        resp = await client.post(f"{NODE_PROXY_URL}/v1/messages", headers=headers, json=anthropic_request)
 
         if resp.status_code != 200:
             logger.error("[%s] Error %d: %s", account.name, resp.status_code, resp.text[:200])
@@ -376,7 +368,7 @@ async def chat_completions(request: Request):
     else:
         client = get_client()
         try:
-            resp = await client.post(f"{ANYROUTER_BASE_URL}/v1/messages", headers=headers, json=anthropic_request)
+            resp = await client.post(f"{NODE_PROXY_URL}/v1/messages", headers=headers, json=anthropic_request)
             if resp.status_code != 200:
                 logger.error("[%s] Error %d", account.name, resp.status_code)
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
@@ -405,7 +397,7 @@ async def list_models(request: Request):
     headers = build_headers(account.api_key)
     client = get_client()
     try:
-        resp = await client.get(f"{ANYROUTER_BASE_URL}/v1/models", headers=headers)
+        resp = await client.get(f"{NODE_PROXY_URL}/v1/models", headers=headers)
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
         return {"object": "list", "data": resp.json().get("data", [])}
@@ -417,16 +409,29 @@ async def list_models(request: Request):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "mode": "passthrough"}
+    # 检查 Node.js 代理是否可用
+    try:
+        client = get_client()
+        resp = await client.get(f"{NODE_PROXY_URL}/health", timeout=5)
+        node_status = resp.json() if resp.status_code == 200 else {"status": "error"}
+    except Exception:
+        node_status = {"status": "unreachable"}
+
+    return {
+        "status": "ok",
+        "mode": "node-proxy",
+        "node_proxy": NODE_PROXY_URL,
+        "node_status": node_status,
+    }
 
 
 @app.get("/")
 async def root():
     return {
         "service": "AnyRouter OpenAI Proxy",
-        "mode": "passthrough",
-        "upstream": ANYROUTER_BASE_URL,
-        "description": "Client must provide valid API key(s) in Authorization header",
+        "mode": "node-proxy",
+        "node_proxy_url": NODE_PROXY_URL,
+        "description": "Forwarding requests to Node.js proxy (using official Anthropic SDK)",
     }
 
 
@@ -438,20 +443,20 @@ if __name__ == "__main__":
 
     print(f"""
 ╔══════════════════════════════════════════════════════════╗
-║       AnyRouter OpenAI Proxy (Passthrough Mode)          ║
+║       AnyRouter OpenAI Proxy (Node.js SDK Mode)          ║
 ╠══════════════════════════════════════════════════════════╣
-║  代理地址: http://{host}:{port}
-║  上游服务: {ANYROUTER_BASE_URL}
+║  Python 代理: http://{host}:{port}
+║  Node.js 代理: {NODE_PROXY_URL}
 ╠══════════════════════════════════════════════════════════╣
-║  透传模式: 客户端必须提供有效的 API Key                    ║
-║  负载均衡: 支持多 key (逗号分隔)                          ║
+║  架构:                                                    ║
+║    客户端 → Python (9999) → Node.js (4000) → anyrouter   ║
 ╠══════════════════════════════════════════════════════════╣
-║  客户端配置示例:                                          ║
-║    单 key:  Authorization: Bearer sk-your-key            ║
-║    多 key:  Authorization: Bearer sk-key1,sk-key2        ║
+║  启动步骤:                                                ║
+║    1. cd node-proxy && npm install && npm start          ║
+║    2. python anyrouter2openai.py                         ║
 ╠══════════════════════════════════════════════════════════╣
 ║  管理接口:                                                ║
-║    GET /health - 健康检查                                 ║
+║    GET /health - 健康检查（含 Node.js 状态）              ║
 ╚══════════════════════════════════════════════════════════╝
 """)
 

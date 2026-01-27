@@ -1,9 +1,10 @@
 # LLM API Protocol Converter Proxy
 
-> 在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，支持多种部署方式，让你使用任意客户端 SDK 访问不同的后端服务
+> 在 OpenAI 和 Anthropic API 协议之间进行双向转换的代理服务集合，通过 Node.js SDK 中转绕过 WAF 检测
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.8+-blue.svg)
+![Python](https://img.shields.io/badge/python-3.11+-blue.svg)
+![Node.js](https://img.shields.io/badge/node.js-20+-green.svg)
 ![FastAPI](https://img.shields.io/badge/fastapi-0.116+-green.svg)
 
 ---
@@ -36,68 +37,39 @@
 
 ## 项目介绍
 
-本项目包含多个代理服务和客户端示例，实现了 OpenAI 和 Anthropic API 协议的互相转换。通过双重中转和代理实现 API 接口和 Claude Code 的便捷使用。
+本项目包含多个代理服务和客户端示例，实现了 OpenAI 和 Anthropic API 协议的互相转换。通过 Node.js SDK 中转绕过 WAF 检测，实现 API 接口和 Claude Code 的便捷使用。
 
 ### 核心特性
 
+- **Node.js SDK 中转**: 使用官方 Anthropic SDK 绕过 WAF/TLS 指纹检测
 - **双向协议转换**: OpenAI ↔ Anthropic 协议互相转换
 - **透传代理模式**: 客户端提供 API Key，服务端只做协议转换
 - **多 Key 负载均衡**: 支持逗号分隔的多个 Key 自动轮询
-- **无服务端密钥**: 不在服务端存储任何 API Key
-- **Docker 一键部署**: 简化部署流程
-
----
-
-## 功能清单
-
-| 功能名称 | 功能说明 | 技术栈 | 状态 |
-|---------|---------|--------|------|
-| OpenAI → Anthropic 转换 | OpenAI 格式转 Anthropic 格式 | FastAPI + httpx | ✅ 稳定 |
-| Anthropic → OpenAI 转换 | Anthropic 格式转 OpenAI 格式 | FastAPI + httpx | ✅ 稳定 |
-| 透传代理模式 | 客户端 Key 透传，无服务端存储 | FastAPI | ✅ 稳定 |
-| 多 Key 负载均衡 | 自动轮询多个 API Key | Python | ✅ 稳定 |
-| 流式响应支持 | SSE 流式输出 | httpx | ✅ 稳定 |
-| 健康检查 | 内置监控接口 | FastAPI | ✅ 稳定 |
-| LiteLLM 配置支持 | YAML 配置文件 | LiteLLM | ✅ 稳定 |
+- **Docker 一键部署**: 三个服务容器化编排
 
 ---
 
 ## 调用链路图
 
-### 透传代理模式
-
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                            调用链路：透传代理模式                                  │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   ┌──────────────────┐       ┌─────────────────────────┐       ┌─────────────┐ │
-│   │  客户端 (带 Key)  │ ───► │   anyrouter2openai.py   │ ───► │  AnyRouter  │ │
-│   │  Authorization:   │       │   (协议转换 + 透传)      │       │  (Claude)   │ │
-│   │  Bearer sk-xxx    │       │   端口 9999             │       │             │ │
-│   └──────────────────┘       └─────────────────────────┘       └─────────────┘ │
-│           │                            │                              │        │
-│           ▼                            ▼                              ▼        │
-│   OpenAI API 格式             OpenAI → Anthropic              Anthropic API    │
-│   客户端提供 API Key          格式转换 + Key 透传            /v1/messages       │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Anthropic 协议透传
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                            Anthropic 协议透传                                    │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│   ┌──────────────────┐       ┌──────────────────────────┐      ┌─────────────┐ │
-│   │  客户端 (带 Key)  │ ───► │  anyrouter2anthropic.py  │ ───► │  AnyRouter  │ │
-│   │  x-api-key:       │       │   (直接透传)              │       │  (Claude)   │ │
-│   │  sk-xxx           │       │   端口 9998              │       │             │ │
-│   └──────────────────┘       └──────────────────────────┘      └─────────────┘ │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                      调用链路：Node.js SDK 中转模式                                    │
+├──────────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                      │
+│   ┌──────────────┐     ┌─────────────────────┐     ┌────────────────┐   ┌─────────┐ │
+│   │ OpenAI 客户端 │ ──► │ anyrouter2openai.py │ ──► │  Node.js Proxy │ ► │AnyRouter│ │
+│   │ (带 Key)      │     │ Python (9999)       │     │  (4000)        │   │(Claude) │ │
+│   │ Bearer sk-xxx │     │ OpenAI→Anthropic    │     │  官方 SDK      │   │         │ │
+│   └──────────────┘     └─────────────────────┘     │  WAF 绕过      │   └─────────┘ │
+│                                                     │  TLS 指纹      │               │
+│   ┌──────────────┐     ┌─────────────────────┐     │                │               │
+│   │Anthropic客户端│ ──► │anyrouter2anthropic  │ ──► │                │               │
+│   │ (带 Key)      │     │ Python (9998)       │     │                │               │
+│   │ x-api-key:    │     │ 协议转发            │     │                │               │
+│   │ sk-xxx        │     │                     │     │                │               │
+│   └──────────────┘     └─────────────────────┘     └────────────────┘               │
+│                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -106,12 +78,12 @@
 
 | 技术 | 版本 | 用途 |
 |------|------|------|
-| Python | 3.8+ | 主要开发语言 |
+| Python | 3.11+ | 代理服务主语言 |
+| Node.js | 20+ | SDK 中转层（绕过 WAF） |
 | FastAPI | 0.116+ | Web 框架 |
 | httpx | 0.28+ | 异步 HTTP 客户端 |
+| @anthropic-ai/sdk | 0.71+ | 官方 Anthropic Node.js SDK |
 | Uvicorn | 0.35+ | ASGI 服务器 |
-| Pydantic | 2.5+ | 数据验证 |
-| LiteLLM | latest | 多模型路由 |
 
 ---
 
@@ -119,46 +91,44 @@
 
 ### 环境要求
 
-- Python 3.8+
-- pip 包管理器
+- Python 3.11+
+- Node.js 20+
+- pip / npm
 
 ### 安装依赖
 
 ```bash
+# Python 依赖
 pip install -r requirements.txt
+
+# Node.js 依赖
+cd node-proxy && npm install && cd ..
 ```
 
 ---
 
 ## 使用说明
 
-### 透传代理模式（推荐）
-
-#### 特点
-
-- ✅ **透传模式**: 客户端必须提供有效的 API Key
-- ✅ **多 Key 负载均衡**: 支持逗号分隔的多个 Key 自动轮询
-- ✅ **无服务端密钥**: 更安全，不在服务端存储任何 Key
-- ✅ **Docker 部署**: 一行命令完成部署
-- ✅ **健康检查**: 内置监控接口
-
-#### 启动服务
+### 启动服务
 
 ```bash
-# 启动 Anthropic 协议代理（端口 9998）
+# 1. 启动 Node.js 代理（端口 4000，必须最先启动）
+cd node-proxy && npm start &
+
+# 2. 启动 Anthropic 协议代理（端口 9998）
 python anyrouter2anthropic.py
 
-# 启动 OpenAI 协议代理（端口 9999）
+# 3. 启动 OpenAI 协议代理（端口 9999）
 python anyrouter2openai.py
 ```
 
-#### OpenAI 协议代理调用
+### OpenAI 协议调用
 
 ```python
 import openai
 
 client = openai.OpenAI(
-    api_key="sk-your-anyrouter-api-key",  # 必须提供有效的 API Key
+    api_key="sk-your-anyrouter-api-key",
     base_url="http://localhost:9999/v1"
 )
 
@@ -173,7 +143,7 @@ for chunk in response:
         print(chunk.choices[0].delta.content, end="")
 ```
 
-#### 多 Key 负载均衡
+### 多 Key 负载均衡
 
 ```python
 import openai
@@ -185,7 +155,7 @@ client = openai.OpenAI(
 )
 ```
 
-#### Anthropic 协议代理调用
+### Anthropic 协议调用
 
 ```python
 import anthropic
@@ -208,40 +178,154 @@ print(response.content[0].text)
 
 ## 配置说明
 
-### 环境变量配置
+### 环境变量
 
-| 变量名 | 必填 | 默认值 | 说明 |
-|--------|------|--------|------|
-| `ANYROUTER_BASE_URL` | ❌ | `https://anyrouter.top` | AnyRouter 服务地址 |
-| `PORT` | ❌ | `9998` | Anthropic 代理端口 |
-| `OPENAI_PROXY_PORT` | ❌ | `9999` | OpenAI 代理端口 |
-| `HOST` | ❌ | `0.0.0.0` | 绑定地址 |
-| `HTTP_TIMEOUT` | ❌ | `120` | HTTP 请求超时时间（秒） |
-| `DEFAULT_MAX_TOKENS` | ❌ | `8192` | 默认最大 tokens |
-| `FORCE_NON_STREAM` | ❌ | `false` | 强制非流式模式 |
+复制 `.env.example` 为 `.env` 并按需修改：
 
-**注意**: 透传模式不需要在服务端配置 `API_KEYS`，客户端必须提供有效的 API Key。
+| 变量名 | 默认值 | 说明 |
+|--------|--------|------|
+| `NODE_PROXY_PORT` | `4000` | Node.js 代理端口 |
+| `NODE_PROXY_URL` | `http://127.0.0.1:4000` | Python 代理连接 Node.js 的地址 |
+| `ANYROUTER_BASE_URL` | `https://anyrouter.top` | 上游服务地址（Node.js 使用） |
+| `PORT` | `9998` | Anthropic 代理端口 |
+| `OPENAI_PROXY_PORT` | `9999` | OpenAI 代理端口 |
+| `HOST` | `0.0.0.0` | 绑定地址 |
+| `HTTP_TIMEOUT` | `120` | HTTP 请求超时时间（秒） |
+| `DEFAULT_MAX_TOKENS` | `8192` | 默认最大 tokens |
+| `FORCE_NON_STREAM` | `false` | 强制非流式模式（OpenAI 代理） |
+
+透传模式不需要在服务端配置 API Key，客户端必须在请求头中提供。
+
+---
+
+## Docker 部署
+
+### 镜像构建
+
+```bash
+# 构建 Python 代理镜像
+docker build -t wwwzhouhui569/anyrouter2proxy:latest .
+
+# 构建 Node.js 代理镜像
+docker build -t wwwzhouhui569/anyrouter-node-proxy:latest ./node-proxy
+```
+
+### Docker Compose 部署（推荐）
+
+```bash
+# 开发环境（本地构建镜像）
+docker-compose -f docker-compose-dev.yml up -d
+
+# 生产环境（使用预构建镜像）
+docker-compose up -d
+
+# 查看状态
+docker-compose ps
+
+# 查看日志
+docker-compose logs -f
+
+# 停止服务
+docker-compose down
+```
+
+### Docker Run 单独运行
+
+需要先创建 Docker 网络，确保三个容器互通：
+
+```bash
+# 创建网络
+docker network create anyrouter-proxy
+
+# 1. 启动 Node.js 代理（必须最先启动）
+docker run -d \
+  --name anyrouter-node-proxy \
+  --network anyrouter-proxy \
+  -p 4000:4000 \
+  -e NODE_PROXY_PORT=4000 \
+  -e ANYROUTER_BASE_URL=https://anyrouter.top \
+  anyrouter-node-proxy:latest
+
+# 2. 启动 Anthropic 代理
+docker run -d \
+  --name anyrouter-anthropic-proxy \
+  --network anyrouter-proxy \
+  -p 9998:9998 \
+  -e RUN_MODE=anthropic \
+  -e NODE_PROXY_URL=http://anyrouter-node-proxy:4000 \
+  -e PORT=9998 \
+  anyrouter2proxy:latest
+
+# 3. 启动 OpenAI 代理
+docker run -d \
+  --name anyrouter-openai-proxy \
+  --network anyrouter-proxy \
+  -p 9999:9999 \
+  -e RUN_MODE=openai \
+  -e NODE_PROXY_URL=http://anyrouter-node-proxy:4000 \
+  -e OPENAI_PROXY_PORT=9999 \
+  anyrouter2proxy:latest
+```
+
+### 验证部署
+
+```bash
+# 检查 Node.js 代理
+curl http://localhost:4000/health
+
+# 检查 Anthropic 代理（含 Node.js 状态）
+curl http://localhost:9998/health
+
+# 检查 OpenAI 代理（含 Node.js 状态）
+curl http://localhost:9999/health
+
+# 测试调用
+curl -X POST http://localhost:9999/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-api-key" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "claude-haiku-4-5-20251001", "messages": [{"role": "user", "content": "你好"}]}'
+```
+
+### 推送镜像
+
+```bash
+# 标记镜像
+docker tag anyrouter2proxy:latest wwwzhouhui569/anyrouter2proxy:latest
+docker tag anyrouter-node-proxy:latest wwwzhouhui569/anyrouter-node-proxy:latest
+
+# 推送到 Docker Hub
+docker push wwwzhouhui569/anyrouter2proxy:latest
+docker push wwwzhouhui569/anyrouter-node-proxy:latest
+```
 
 ---
 
 ## API 端点
 
-### anyrouter2anthropic.py (端口 9998)
+### Node.js 代理 (端口 4000)
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/messages` | POST | Anthropic Messages API（含 WAF 处理） |
+| `/health` | GET | 健康检查 |
+| `/` | GET | 服务信息 |
+
+### Anthropic 代理 (端口 9998)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/v1/messages` | POST | Anthropic Messages API |
 | `/v1/models` | GET | 列出可用模型 |
-| `/health` | GET | 健康检查 |
+| `/health` | GET | 健康检查（含 Node.js 状态） |
 | `/` | GET | 服务信息 |
 
-### anyrouter2openai.py (端口 9999)
+### OpenAI 代理 (端口 9999)
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/v1/chat/completions` | POST | OpenAI Chat Completions API |
 | `/v1/models` | GET | 列出可用模型 |
-| `/health` | GET | 健康检查 |
+| `/health` | GET | 健康检查（含 Node.js 状态） |
 | `/` | GET | 服务信息 |
 
 ---
@@ -252,7 +336,7 @@ print(response.content[0].text)
 
 ```http
 Authorization: Bearer sk-your-api-key
-# 或多 Key 负载均衡
+# 多 Key 负载均衡
 Authorization: Bearer sk-key1,sk-key2,sk-key3
 ```
 
@@ -276,9 +360,9 @@ x-api-key: sk-key1,sk-key2,sk-key3
 | `claude-3-5-haiku-20241022` | Claude 3.5 Haiku |
 | `claude-3-5-sonnet-20241022` | Claude 3.5 Sonnet |
 | `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet |
-| `claude-opus-4-5-20251101` | Claude Opus 4.5 |
 | `claude-sonnet-4-20250514` | Claude Sonnet 4 |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-opus-4-5-20251101` | Claude Opus 4.5 |
 
 ---
 
@@ -286,90 +370,34 @@ x-api-key: sk-key1,sk-key2,sk-key3
 
 ```
 anyrouter2proxy/
-├── # 🚀 透传代理模式（推荐）
-├── anyrouter2anthropic.py       # Anthropic 协议透传代理 (端口 9998)
-├── anyrouter2openai.py          # OpenAI 协议透传代理 (端口 9999)
-├── test_openai_proxy.py         # OpenAI 代理测试脚本
-├── Dockerfile                    # Docker 镜像构建文件
-├── docker-compose.yml           # Docker Compose 服务编排
+├── anyrouter2anthropic.py       # Anthropic 协议代理 (端口 9998)
+├── anyrouter2openai.py          # OpenAI 协议代理 (端口 9999)
+├── node-proxy/                  # Node.js 代理层（绕过 WAF）
+│   ├── server.mjs               # Node.js 代理服务 (端口 4000)
+│   ├── package.json             # Node.js 依赖配置
+│   └── Dockerfile               # Node.js 镜像构建文件
+├── Dockerfile                   # Python 代理镜像构建文件
+├── docker-compose.yml           # 生产环境 Docker Compose
 ├── docker-compose-dev.yml       # 开发环境 Docker Compose
-├── .env.example                 # 环境变量示例文件
-├── requirements.txt             # Python 依赖包
-├── DOCKER.md                    # Docker 部署详细指南
+├── .env.example                 # 环境变量示例
+├── requirements.txt             # Python 依赖
+├── test_openai_proxy.py         # OpenAI 代理测试
+├── test_agentrouter_proxy.py    # Anthropic 代理测试
 │
-├── # 🏗️ LiteLLM 方案
-├── anthropic2openai_proxy.py    # Anthropic -> OpenAI 代理 (端口 8088)
+├── # LiteLLM 方案
+├── anthropic2openai_proxy.py    # Anthropic → OpenAI 代理 (端口 8088)
 ├── conf_anthropic20251212.yaml  # LiteLLM 配置文件
 ├── openai_client.py             # OpenAI SDK 客户端示例
 ├── anthropic_client.py          # Anthropic SDK 客户端示例
 │
-└── README.md                    # 本文档
+└── README.md
 ```
 
 ---
 
-## 开发指南
+## 客户端配置
 
-### 本地开发
-
-```bash
-# 安装依赖
-pip install -r requirements.txt
-
-# 启动 Anthropic 协议代理
-python anyrouter2anthropic.py
-
-# 启动 OpenAI 协议代理
-python anyrouter2openai.py
-
-# 测试 OpenAI 代理
-python test_openai_proxy.py
-```
-
-### Docker 开发
-
-```bash
-# 拉取镜像
-docker pull wwwzhouhui569/anyrouter2proxy:latest
-
-# 启动服务
-docker-compose up -d
-
-# 查看状态
-docker-compose ps
-
-# 查看日志
-docker-compose logs -f
-```
-
----
-
-## 部署指南
-
-### Docker 一键部署
-
-```bash
-# 1. 克隆项目
-git clone <your-repo>
-cd anyrouter2proxy
-
-# 2. 启动服务（透传模式，无需配置 API Key）
-docker-compose up -d
-
-# 3. 验证服务
-curl http://localhost:9998/health
-curl http://localhost:9999/health
-
-# 4. 测试调用（需要提供你的 API Key）
-curl -X POST http://localhost:9999/v1/chat/completions \
-  -H "Authorization: Bearer sk-your-anyrouter-api-key" \
-  -H "Content-Type: application/json" \
-  -d '{"model": "claude-haiku-4-5-20251001", "messages": [{"role": "user", "content": "你好"}]}'
-```
-
-### Claude Code 配置
-
-使用 cc-switch 配置：
+### Claude Code
 
 ```json
 {
@@ -381,7 +409,7 @@ curl -X POST http://localhost:9999/v1/chat/completions \
 }
 ```
 
-### Cherry Studio 配置
+### Cherry Studio
 
 1. 添加新的 API 提供商
 2. API 地址：`http://localhost:9999/v1`（OpenAI）或 `http://localhost:9998`（Anthropic）
@@ -401,13 +429,13 @@ A: 确保请求头包含有效的 API Key。OpenAI 协议使用 `Authorization: 
 <details>
 <summary>Q: 服务无法访问？</summary>
 
-A: 检查服务状态：`docker-compose ps` 和 `docker-compose logs`。
+A: 检查服务状态：`docker-compose ps` 和 `docker-compose logs`。确保 Node.js 代理已启动。
 </details>
 
 <details>
-<summary>Q: 上游错误？</summary>
+<summary>Q: health 接口显示 node_status 为 unreachable？</summary>
 
-A: 检查 API Key 是否有效，检查 AnyRouter 服务是否可用。
+A: Node.js 代理未启动或网络不通。检查 node-proxy 容器是否运行：`docker-compose logs node-proxy`。
 </details>
 
 <details>
@@ -417,32 +445,16 @@ A: 在客户端将多个 Key 用逗号分隔，如 `sk-key1,sk-key2,sk-key3`，�
 </details>
 
 <details>
-<summary>Q: 支持流式响应吗？</summary>
+<summary>Q: 遇到 WAF 拦截返回 HTML 内容？</summary>
 
-A: 是的，两个代理都完整支持 SSE 流式输出。客户端 SDK 设置 `stream=True` 即可。
+A: Node.js 代理内置了 WAF 自动解决机制。确保请求经过 Node.js 代理（4000 端口），而不是直连上游。
 </details>
 
 <details>
-<summary>Q: 如何在服务端配置 API Key？</summary>
+<summary>Q: Docker 容器启动顺序？</summary>
 
-A: 透传模式不支持服务端配置 API Key，必须由客户端提供。如需服务端配置，请使用 LiteLLM 方案。
+A: Node.js 代理必须最先启动。使用 docker-compose 时已通过 `depends_on` + `service_healthy` 自动保证启动顺序。
 </details>
-
----
-
-## 使用场景
-
-### 透传代理模式（推荐）
-
-1. **安全部署**: 不在服务端存储 API Key，每个用户使用自己的 Key
-2. **多租户**: 不同用户使用不同的 Key，互不影响
-3. **负载均衡**: 单用户多 Key 自动轮询
-4. **协议转换**: 使用 OpenAI SDK 调用 Claude 模型
-
-### LiteLLM 方案
-
-1. **快速原型**: 无需本地部署，使用 Render 免费托管
-2. **学习研究**: 了解 LiteLLM 的配置和使用方式
 
 ---
 
@@ -477,7 +489,7 @@ MIT License
 
 ## 打赏
 
-如果这个项目对你有帮助，欢迎请我喝杯咖啡 ☕
+如果这个项目对你有帮助，欢迎请我喝杯咖啡
 
 **微信支付**
 
@@ -487,6 +499,6 @@ MIT License
 
 ## Star History
 
-如果觉得项目不错，欢迎点个 Star ⭐
+如果觉得项目不错，欢迎点个 Star
 
 [![Star History Chart](https://api.star-history.com/svg?repos=wwwzhouhui/anyrouter2proxy&type=Date)](https://star-history.com/#wwwzhouhui/anyrouter2proxy&Date)

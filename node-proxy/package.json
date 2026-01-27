@@ -1,0 +1,15 @@
+{
+  "name": "anyrouter-node-proxy",
+  "version": "1.0.0",
+  "description": "Node.js proxy using official Anthropic SDK to bypass WAF detection",
+  "type": "module",
+  "main": "server.mjs",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "node-fetch": "^3.3.2",
+    "tough-cookie": "^4.1.3"
+  }
+}
