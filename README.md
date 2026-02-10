@@ -476,7 +476,7 @@ MIT License
 
 欢迎加入技术交流群，分享你的使用心得和反馈建议：
 
-![技术交流群](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20260204143234495.png)
+![技术交流群](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Screenshot_20260210_085255_com.tencent.mm.jpg)
 
 ---
 
