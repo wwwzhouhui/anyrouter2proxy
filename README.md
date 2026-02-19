@@ -44,7 +44,9 @@
 ### 核心特性
 
 - **Node.js SDK 中转**: 使用官方 Anthropic SDK 绕过 WAF/TLS 指纹检测
+- **Claude Code 请求伪装**: 自动注入 Claude Code CLI 完整请求特征，绕过高级模型负载限制
 - **双向协议转换**: OpenAI ↔ Anthropic 协议互相转换
+- **客户端头部透传**: 完整透传客户端请求头到上游，支持 Claude Code 等工具直连
 - **透传代理模式**: 客户端提供 API Key，服务端只做协议转换
 - **多 Key 负载均衡**: 支持逗号分隔的多个 Key 自动轮询
 - **Docker 一键部署**: 三个服务容器化编排
@@ -61,15 +63,21 @@
 │   ┌──────────────┐     ┌─────────────────────┐     ┌────────────────┐   ┌─────────┐ │
 │   │ OpenAI 客户端 │ ──► │ anyrouter2openai.py │ ──► │  Node.js Proxy │ ► │AnyRouter│ │
 │   │ (带 Key)      │     │ Python (9999)       │     │  (4000)        │   │(Claude) │ │
-│   │ Bearer sk-xxx │     │ OpenAI→Anthropic    │     │  官方 SDK      │   │         │ │
-│   └──────────────┘     └─────────────────────┘     │  WAF 绕过      │   └─────────┘ │
-│                                                     │  TLS 指纹      │               │
-│   ┌──────────────┐     ┌─────────────────────┐     │                │               │
+│   │ Bearer sk-xxx │     │ OpenAI→Anthropic    │     │  WAF 绕过      │   │         │ │
+│   └──────────────┘     └─────────────────────┘     │  TLS 指纹      │   └─────────┘ │
+│                                                     │  Claude Code   │               │
+│   ┌──────────────┐     ┌─────────────────────┐     │  请求伪装      │               │
 │   │Anthropic客户端│ ──► │anyrouter2anthropic  │ ──► │                │               │
 │   │ (带 Key)      │     │ Python (9998)       │     │                │               │
-│   │ x-api-key:    │     │ 协议转发            │     │                │               │
+│   │ x-api-key:    │     │ 头部透传            │     │                │               │
 │   │ sk-xxx        │     │                     │     │                │               │
 │   └──────────────┘     └─────────────────────┘     └────────────────┘               │
+│                                                                                      │
+│   ┌──────────────┐     ┌──────────────────────────┐                   ┌─────────┐   │
+│   │Anthropic客户端│ ──► │anyrouter2anthropic       │ ────────────────► │AnyRouter│   │
+│   │ (带 Key)      │     │  _agentrouter.py         │   直连（无WAF）   │(Claude) │   │
+│   │               │     │ Python (9997)            │                   └─────────┘   │
+│   └──────────────┘     └──────────────────────────┘                                  │
 │                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -304,6 +312,16 @@ docker push wwwzhouhui569/anyrouter-node-proxy:latest
 
 ## API 端点
 
+### AgentRouter 直连代理 (端口 9997)
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/v1/messages` | POST | Anthropic Messages API（直连上游） |
+| `/v1/models` | GET | 列出可用模型 |
+| `/health` | GET | 健康检查 |
+| `/stats` | GET | 负载均衡统计 |
+| `/` | GET | 服务信息 |
+
 ### Node.js 代理 (端口 4000)
 
 | 端点 | 方法 | 说明 |
@@ -364,7 +382,9 @@ x-api-key: sk-key1,sk-key2,sk-key3
 | `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet |
 | `claude-sonnet-4-20250514` | Claude Sonnet 4 |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 |
+| `claude-sonnet-4-6` | Claude Sonnet 4.6 |
 | `claude-opus-4-5-20251101` | Claude Opus 4.5 |
+| `claude-opus-4-6` | Claude Opus 4.6 |
 
 ---
 
@@ -372,25 +392,27 @@ x-api-key: sk-key1,sk-key2,sk-key3
 
 ```
 anyrouter2proxy/
-├── anyrouter2anthropic.py       # Anthropic 协议代理 (端口 9998)
-├── anyrouter2openai.py          # OpenAI 协议代理 (端口 9999)
-├── node-proxy/                  # Node.js 代理层（绕过 WAF）
-│   ├── server.mjs               # Node.js 代理服务 (端口 4000)
-│   ├── package.json             # Node.js 依赖配置
-│   └── Dockerfile               # Node.js 镜像构建文件
-├── Dockerfile                   # Python 代理镜像构建文件
-├── docker-compose.yml           # 生产环境 Docker Compose
-├── docker-compose-dev.yml       # 开发环境 Docker Compose
-├── .env.example                 # 环境变量示例
-├── requirements.txt             # Python 依赖
-├── test_openai_proxy.py         # OpenAI 代理测试
-├── test_agentrouter_proxy.py    # Anthropic 代理测试
+├── anyrouter2anthropic.py              # Anthropic 协议代理 - Node.js 中转模式 (端口 9998)
+├── anyrouter2openai.py                 # OpenAI 协议代理 - Node.js 中转模式 (端口 9999)
+├── anyrouter2anthropic_agentrouter.py  # Anthropic 协议代理 - 直连模式 (端口 9997)
+├── node-proxy/                         # Node.js 代理层（WAF 绕过 + Claude Code 伪装）
+│   ├── server.mjs                      # Node.js 代理服务 (端口 4000)
+│   ├── package.json                    # Node.js 依赖配置
+│   └── Dockerfile                      # Node.js 镜像构建文件
+├── Dockerfile                          # Python 代理镜像构建文件
+├── docker-compose.yml                  # 生产环境 Docker Compose
+├── docker-compose-dev.yml              # 开发环境 Docker Compose
+├── .env.example                        # 环境变量示例
+├── .env.agentrouter                    # AgentRouter 直连模式配置
+├── requirements.txt                    # Python 依赖
+├── test_openai_proxy.py                # OpenAI 代理测试
+├── test_agentrouter_proxy.py           # Anthropic 代理测试
 │
 ├── # LiteLLM 方案
-├── anthropic2openai_proxy.py    # Anthropic → OpenAI 代理 (端口 8088)
-├── conf_anthropic20251212.yaml  # LiteLLM 配置文件
-├── openai_client.py             # OpenAI SDK 客户端示例
-├── anthropic_client.py          # Anthropic SDK 客户端示例
+├── anthropic2openai_proxy.py           # Anthropic → OpenAI 代理 (端口 8088)
+├── conf_anthropic20251212.yaml         # LiteLLM 配置文件
+├── openai_client.py                    # OpenAI SDK 客户端示例
+├── anthropic_client.py                 # Anthropic SDK 客户端示例
 │
 └── README.md
 ```
@@ -401,15 +423,33 @@ anyrouter2proxy/
 
 ### Claude Code
 
+**方式一：通过 Node.js 中转代理（推荐，可使用高级模型）**
+
 ```json
 {
   "env": {
     "ANTHROPIC_AUTH_TOKEN": "sk-your-anyrouter-api-key",
     "ANTHROPIC_BASE_URL": "http://localhost:9998",
-    "ANTHROPIC_MODEL": "claude-haiku-4-5-20251001"
+    "ANTHROPIC_MODEL": "claude-sonnet-4-6"
   }
 }
 ```
+
+**方式二：直连 AnyRouter（需配合 Claude Code 环境变量）**
+
+```json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "sk-your-anyrouter-api-key",
+    "ANTHROPIC_BASE_URL": "https://anyrouter.top",
+    "ANTHROPIC_MODEL": "claude-opus-4-6",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}
+```
+
+> **注意**：直连方式仅适用于 Claude Code 等 CC 工具，普通 API 客户端无法添加这两个环境变量。推荐使用方式一通过代理调用，代理会自动注入所有必要的 Claude Code 请求特征。
 
 ### Cherry Studio
 
@@ -457,6 +497,54 @@ A: Node.js 代理内置了 WAF 自动解决机制。确保请求经过 Node.js �
 
 A: Node.js 代理必须最先启动。使用 docker-compose 时已通过 `depends_on` + `service_healthy` 自动保证启动顺序。
 </details>
+
+<details>
+<summary>Q: 高级模型（sonnet-4-6、opus-4-6）报"负载已达上限"？</summary>
+
+A: 这是上游服务对非 Claude Code 请求的限制。使用 Node.js 中转模式（端口 9998/9999）可自动注入 Claude Code 请求特征绕过限制。直连模式（端口 9997）无此能力。
+</details>
+
+<details>
+<summary>Q: "invalid claude code request" 错误？</summary>
+
+A: 上游检测到 Claude Code 的 User-Agent 但请求体不符合 Claude Code 特征。请确保使用 Node.js 中转模式，代理会自动注入完整的 Claude Code 系统提示、thinking 字段和 SDK 指纹头。
+</details>
+
+---
+
+## 版本记录
+
+### v0.0.2 (2026-02-19)
+
+**新增功能：Claude Code 请求伪装 & 高级模型支持**
+
+- **Claude Code 请求伪装**：Node.js 代理层自动注入完整 Claude Code CLI 请求特征，包括：
+  - `User-Agent: claude-cli/2.1.39 (external, cli)`
+  - `anthropic-beta: claude-code-20250219,...` 等 beta 特性标识
+  - `x-app: cli`、`x-stainless-*` SDK 指纹头、`sec-fetch-mode` 等完整头部
+  - Claude Code 系统提示（system prompt）
+  - `thinking: {"type": "adaptive"}` 自适应思维
+  - `metadata` 用户身份信息
+- **客户端头部完整透传**：Python 代理层（9998/9999）不再硬编码请求头，改为完整透传客户端所有特殊头到 Node.js 层，支持 Claude Code 等工具直连时的头部原样传递
+- **绕过高级模型负载限制**：通过模拟 Claude Code 请求特征，解决 `claude-sonnet-4-6`、`claude-opus-4-6` 等高级模型 "负载已达到上限" 的问题
+- **新增模型支持**：`claude-sonnet-4-6`、`claude-opus-4-6`
+- **请求日志增强**：Python 代理层增加完整请求头和请求体日志（脱敏），便于调试和抓包分析
+
+**修复问题：**
+
+- 修复 `anyrouter2openai.py` 硬编码系统提示导致 Node.js 层无法注入 Claude Code 特征的问题
+- 修复 Python httpx 的 `User-Agent: python-httpx/0.28.1` 泄露导致上游识别为非 Claude Code 请求的问题
+- 修复 Node.js 代理缺少 `anthropic-version` 头导致非流式请求被拒绝的问题
+- 修复小写/大写重复头（`content-type`/`Content-Type`、`accept`/`Accept`）导致上游解析异常的问题
+
+### v0.0.1
+
+- 初始版本
+- Node.js SDK 中转模式，绕过 WAF/TLS 指纹检测
+- OpenAI ↔ Anthropic 双向协议转换
+- 多 Key 负载均衡
+- Docker 容器化部署
+- AgentRouter 直连代理模式
 
 ---
 

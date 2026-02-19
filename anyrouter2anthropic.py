@@ -132,23 +132,46 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 app = FastAPI(title="AnyRouter Anthropic Proxy (Node.js SDK Mode)", lifespan=lifespan)
 
 
+def build_forwarding_headers(api_key: str, original_headers: dict[str, str] = None) -> dict[str, str]:
+    """构建转发到 Node.js 代理的请求头，透传客户端所有特殊头（如 Claude Code 头）"""
+    # 需要跳过的 hop-by-hop 头和内部头
+    SKIP_HEADERS = {
+        "host", "content-length", "transfer-encoding", "connection",
+        "keep-alive", "upgrade", "proxy-authorization", "proxy-connection",
+        "accept-encoding",
+    }
+
+    headers = {}
+
+    # 透传客户端的所有头（保留 Claude Code 发送的所有特殊头）
+    if original_headers:
+        for key, val in original_headers.items():
+            if key.lower() not in SKIP_HEADERS:
+                headers[key] = val
+
+    # 确保关键字段
+    headers["Content-Type"] = "application/json"
+    headers["x-api-key"] = api_key
+
+    # 移除 authorization 避免重复认证
+    headers.pop("authorization", None)
+
+    return headers
+
+
 async def stream_response(
     req: dict[str, Any],
     account: Account,
+    forwarding_headers: dict[str, str],
 ) -> AsyncGenerator[str, None]:
     """转发流式请求到 Node.js 代理"""
     client = get_client()
-
-    headers = {
-        "Content-Type": "application/json",
-        "x-api-key": account.api_key,
-    }
 
     try:
         async with client.stream(
             "POST",
             f"{NODE_PROXY_URL}/v1/messages",
-            headers=headers,
+            headers=forwarding_headers,
             json=req
         ) as resp:
             if resp.status_code != 200:
@@ -191,8 +214,24 @@ async def messages(request: Request):
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
+    # 记录完整的客户端请求信息（用于调试 Claude Code 请求特征）
+    original_headers = dict(request.headers)
+    logger.info("========== 客户端请求详情 ==========")
+    logger.info("[请求头] %s", json.dumps(
+        {k: v for k, v in original_headers.items() if k.lower() not in ("x-api-key", "authorization")},
+        ensure_ascii=False, indent=2
+    ))
+    logger.info("[请求体(不含messages)] %s", json.dumps(
+        {k: v for k, v in req.items() if k != "messages"},
+        ensure_ascii=False
+    ))
+    logger.info("====================================")
+
     req = ensure_metadata(req)
     req = ensure_max_tokens(req)
+
+    # 构建转发头，透传客户端所有特殊头
+    forwarding_headers = build_forwarding_headers(account.api_key, original_headers)
 
     model = req.get("model", "unknown")
     is_stream = req.get("stream", False)
@@ -200,21 +239,16 @@ async def messages(request: Request):
 
     if is_stream:
         return StreamingResponse(
-            stream_response(req, account),
+            stream_response(req, account, forwarding_headers),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive", "X-Accel-Buffering": "no"},
         )
     else:
         client = get_client()
-        headers = {
-            "Content-Type": "application/json",
-            "x-api-key": account.api_key,
-        }
-
         try:
             resp = await client.post(
                 f"{NODE_PROXY_URL}/v1/messages",
-                headers=headers,
+                headers=forwarding_headers,
                 json=req
             )
 

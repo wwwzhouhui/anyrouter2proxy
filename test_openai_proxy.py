@@ -8,13 +8,13 @@ MODELS_URL = "http://localhost:9999/v1/models"
 
 # 透传模式：必须提供有效的 anyrouter.top API Key
 # 支持多 key 负载均衡，用逗号分隔
-API_KEY = "sk-your-api-key"
+API_KEY = "sk-kkkkk"
 
 
 async def test_non_stream():
     print("\n--- 测试非流式响应 ---")
     payload = {
-        "model": "claude-haiku-4-5-20251001",
+        "model": "claude-sonnet-4-6",
         "max_tokens": 1024,
         "messages": [
             {"role": "user", "content": "你好，请自我介绍一下。"}

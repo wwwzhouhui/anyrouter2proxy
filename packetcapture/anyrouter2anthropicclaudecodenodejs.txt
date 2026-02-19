@@ -1,0 +1,195 @@
+[2026-02-19T09:03:32.382Z] claude-haiku-4-5-20251001 stream=true key=sk-uYXVAwg...
+[转发头] {
+  "accept": "application/json",
+  "x-stainless-retry-count": "0",
+  "x-stainless-timeout": "600",
+  "x-stainless-lang": "js",
+  "x-stainless-package-version": "0.73.0",
+  "x-stainless-os": "Windows",
+  "x-stainless-arch": "x64",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v22.14.0",
+  "anthropic-dangerous-direct-browser-access": "true",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli",
+  "user-agent": "claude-cli/2.1.39 (external, cli)",
+  "content-type": "application/json",
+  "anthropic-beta": "interleaved-thinking-2025-05-14,prompt-caching-scope-2026-01-05,structured-outputs-2025-12-15",
+  "accept-language": "*",
+  "sec-fetch-mode": "cors",
+  "Content-Type": "application/json",
+  "Content-Length": 936,
+  "Accept": "text/event-stream",
+  "claude-code-attribution-header": "0",
+  "claude-code-disable-nonessential-traffic": "1"
+}
+Making request to: https://anyrouter.top/v1/messages
+Request headers: {
+  "Accept-Encoding": "identity",
+  "accept": "application/json",
+  "x-stainless-retry-count": "0",
+  "x-stainless-timeout": "600",
+  "x-stainless-lang": "js",
+  "x-stainless-package-version": "0.73.0",
+  "x-stainless-os": "Windows",
+  "x-stainless-arch": "x64",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v22.14.0",
+  "anthropic-dangerous-direct-browser-access": "true",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli",
+  "user-agent": "claude-cli/2.1.39 (external, cli)",
+  "content-type": "application/json",
+  "anthropic-beta": "interleaved-thinking-2025-05-14,prompt-caching-scope-2026-01-05,structured-outputs-2025-12-15",
+  "accept-language": "*",
+  "sec-fetch-mode": "cors",
+  "x-api-key": "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2",
+  "Content-Type": "application/json",
+  "Content-Length": 936,
+  "Accept": "text/event-stream",
+  "claude-code-attribution-header": "0",
+  "claude-code-disable-nonessential-traffic": "1",
+  "Host": "anyrouter.top"
+}
+Request body preview: {"model":"claude-haiku-4-5-20251001","messages":[{"role":"user","content":[{"type":"text","text":"nihao"}]}],"system":[{"type":"text","text":"You are Claude Code, Anthropic's official CLI for Claude."
+[2026-02-19T09:03:32.480Z] claude-haiku-4-5-20251001 stream=false key=sk-uYXVAwg...
+[转发头] {
+  "accept": "application/json",
+  "x-stainless-retry-count": "0",
+  "x-stainless-timeout": "600",
+  "x-stainless-lang": "js",
+  "x-stainless-package-version": "0.73.0",
+  "x-stainless-os": "Windows",
+  "x-stainless-arch": "x64",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v22.14.0",
+  "anthropic-dangerous-direct-browser-access": "true",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli",
+  "user-agent": "claude-cli/2.1.39 (external, cli)",
+  "content-type": "application/json",
+  "anthropic-beta": "interleaved-thinking-2025-05-14,prompt-caching-scope-2026-01-05",
+  "accept-language": "*",
+  "sec-fetch-mode": "cors",
+  "Content-Type": "application/json",
+  "Content-Length": 30684,
+  "Accept": "application/json",
+  "claude-code-attribution-header": "0",
+  "claude-code-disable-nonessential-traffic": "1"
+}
+Making request to: https://anyrouter.top/v1/messages
+Request headers: {
+  "Accept-Encoding": "identity",
+  "accept": "application/json",
+  "x-stainless-retry-count": "0",
+  "x-stainless-timeout": "600",
+  "x-stainless-lang": "js",
+  "x-stainless-package-version": "0.73.0",
+  "x-stainless-os": "Windows",
+  "x-stainless-arch": "x64",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v22.14.0",
+  "anthropic-dangerous-direct-browser-access": "true",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli",
+  "user-agent": "claude-cli/2.1.39 (external, cli)",
+  "content-type": "application/json",
+  "anthropic-beta": "interleaved-thinking-2025-05-14,prompt-caching-scope-2026-01-05",
+  "accept-language": "*",
+  "sec-fetch-mode": "cors",
+  "x-api-key": "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2",
+  "Content-Type": "application/json",
+  "Content-Length": 30684,
+  "Accept": "application/json",
+  "claude-code-attribution-header": "0",
+  "claude-code-disable-nonessential-traffic": "1",
+  "Host": "anyrouter.top"
+}
+Request body preview: {"model":"claude-haiku-4-5-20251001","max_tokens":1,"messages":[{"role":"user","content":"count"}],"tools":[{"name":"mcp__chrome-devtools__click","description":"Clicks on the provided element","input_
+Response encoding: undefined
+Response status: 200
+Response content-type: text/event-stream
+Response length: 1704
+Response preview: event: message_start
+data: {"type":"message_start","message":{"model":"claude-haiku-4-5-20251001","id":"msg_01W9z5PNizZ1Sg7GztmSe3NR","type":"message","role":"assistant","content":[],"stop_reason":null,"stop_sequence":null,"usage":{"input_tokens":292,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"cache_creation":{"ephemeral_5m_input_tokens":0,"ephemeral_1h_input_tokens":0},"output_tokens":7,"service_tier":"standard","inference_geo":"not_available"}}         }
+
+
+event: content_block
+Set-Cookie headers: [
+  'acw_tc=9b66d19a17714918142188011e4fbc18e646d9fd56ab17c97a75c1f43f;path=/;HttpOnly;Max-Age=3600',
+  'cdn_sec_tc=9b66d19a17714918142188011e4fbc18e646d9fd56ab17c97a75c1f43f;path=/;HttpOnly;Max-Age=3600'
+]
+Response encoding: undefined
+Response status: 200
+Response content-type: application/json
+Response length: 441
+Response preview: {"content":[{"text":"I","type":"text"}],"id":"msg_012goJiAv2wSit7iuKWh74W6","model":"claude-haiku-4-5-20251001","role":"assistant","stop_reason":"max_tokens","stop_sequence":null,"type":"message","usage":{"cache_creation":{"ephemeral_1h_input_tokens":0,"ephemeral_5m_input_tokens":0},"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"inference_geo":"not_available","input_tokens":9363,"output_tokens":1,"service_tier":"standard"}}
+Set-Cookie headers: [
+  'acw_tc=9b66d1a817714918141187465e15b603382fa94cd2da7cbcd969ba4835;path=/;HttpOnly;Max-Age=3600',
+  'cdn_sec_tc=9b66d1a817714918141187465e15b603382fa94cd2da7cbcd969ba4835;path=/;HttpOnly;Max-Age=3600'
+]
+[2026-02-19T09:03:35.017Z] claude-opus-4-6 stream=true key=sk-uYXVAwg...
+[转发头] {
+  "accept": "application/json",
+  "x-stainless-retry-count": "0",
+  "x-stainless-timeout": "600",
+  "x-stainless-lang": "js",
+  "x-stainless-package-version": "0.73.0",
+  "x-stainless-os": "Windows",
+  "x-stainless-arch": "x64",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v22.14.0",
+  "anthropic-dangerous-direct-browser-access": "true",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli",
+  "user-agent": "claude-cli/2.1.39 (external, cli)",
+  "content-type": "application/json",
+  "anthropic-beta": "claude-code-20250219,prompt-caching-scope-2026-01-05,effort-2025-11-24,adaptive-thinking-2026-01-28",
+  "accept-language": "*",
+  "sec-fetch-mode": "cors",
+  "Content-Type": "application/json",
+  "Content-Length": 202422,
+  "Accept": "text/event-stream",
+  "claude-code-attribution-header": "0",
+  "claude-code-disable-nonessential-traffic": "1"
+}
+Making request to: https://anyrouter.top/v1/messages
+Request headers: {
+  "Accept-Encoding": "identity",
+  "accept": "application/json",
+  "x-stainless-retry-count": "0",
+  "x-stainless-timeout": "600",
+  "x-stainless-lang": "js",
+  "x-stainless-package-version": "0.73.0",
+  "x-stainless-os": "Windows",
+  "x-stainless-arch": "x64",
+  "x-stainless-runtime": "node",
+  "x-stainless-runtime-version": "v22.14.0",
+  "anthropic-dangerous-direct-browser-access": "true",
+  "anthropic-version": "2023-06-01",
+  "x-app": "cli",
+  "user-agent": "claude-cli/2.1.39 (external, cli)",
+  "content-type": "application/json",
+  "anthropic-beta": "claude-code-20250219,prompt-caching-scope-2026-01-05,effort-2025-11-24,adaptive-thinking-2026-01-28",
+  "accept-language": "*",
+  "sec-fetch-mode": "cors",
+  "x-api-key": "sk-uYXVAwgCSDb5OOoLCm4YwxUmbLSG4oZY9DHaQXL6r2Uso7S2",
+  "Content-Type": "application/json",
+  "Content-Length": 202422,
+  "Accept": "text/event-stream",
+  "claude-code-attribution-header": "0",
+  "claude-code-disable-nonessential-traffic": "1",
+  "Host": "anyrouter.top",
+  "Cookie": "acw_tc=9b66d1a817714918141187465e15b603382fa94cd2da7cbcd969ba4835; cdn_sec_tc=9b66d1a817714918141187465e15b603382fa94cd2da7cbcd969ba4835"
+}
+Request body preview: {"model":"claude-opus-4-6","messages":[{"role":"user","content":[{"type":"text","text":"<system-reminder>\nThe following skills are available for use with the Skill tool:\n\n- baoyu-xhs-images: Xiaoho
+Response encoding: undefined
+Response status: 200
+Response content-type: text/event-stream
+Response length: 1449
+Response preview: event: message_start
+data: {"message":{"content":[],"id":"msg_011oCawGcpe1DaaiUMDGp882","model":"claude-opus-4-6","role":"assistant","stop_reason":null,"stop_sequence":null,"type":"message","usage":{"cache_creation":{"ephemeral_1h_input_tokens":51657,"ephemeral_5m_input_tokens":0},"cache_creation_input_tokens":51657,"cache_read_input_tokens":0,"inference_geo":"not_available","input_tokens":3,"output_tokens":2,"service_tier":"standard"}},"type":"message_start"}
+
+
+event: content_block_start
+data: 

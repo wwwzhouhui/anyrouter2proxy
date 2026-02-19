@@ -128,12 +128,30 @@ def generate_user_id() -> str:
     return f"user_{user_hash}_account__session_{session_uuid}"
 
 
-def build_headers(api_key: str) -> dict[str, str]:
-    """构建请求头（简化版，复杂头部由 Node.js 代理处理）"""
-    return {
-        "Content-Type": "application/json",
-        "x-api-key": api_key,
+def build_forwarding_headers(api_key: str, original_headers: dict[str, str] = None) -> dict[str, str]:
+    """构建转发到 Node.js 代理的请求头，透传客户端所有特殊头"""
+    SKIP_HEADERS = {
+        "host", "content-length", "transfer-encoding", "connection",
+        "keep-alive", "upgrade", "proxy-authorization", "proxy-connection",
+        "accept-encoding",
     }
+
+    headers = {}
+
+    # 透传客户端的所有头（保留 Claude Code 发送的所有特殊头）
+    if original_headers:
+        for key, val in original_headers.items():
+            if key.lower() not in SKIP_HEADERS:
+                headers[key] = val
+
+    # 确保关键字段
+    headers["Content-Type"] = "application/json"
+    headers["x-api-key"] = api_key
+
+    # 移除 authorization 避免重复认证
+    headers.pop("authorization", None)
+
+    return headers
 
 
 def convert_message_content(content: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -162,11 +180,7 @@ def convert_message_content(content: str | list[dict[str, Any]]) -> list[dict[st
 
 def convert_openai_to_anthropic(openai_request: dict[str, Any]) -> dict[str, Any]:
     """将 OpenAI 请求格式转换为 Anthropic 格式"""
-    system_messages: list[dict[str, Any]] = [{
-        "type": "text",
-        "text": DEFAULT_SYSTEM_PROMPT,
-        "cache_control": {"type": "ephemeral"},
-    }]
+    system_messages: list[dict[str, Any]] = []
     chat_messages: list[dict[str, Any]] = []
 
     for msg in openai_request.get("messages", []):
@@ -186,11 +200,15 @@ def convert_openai_to_anthropic(openai_request: dict[str, Any]) -> dict[str, Any
     anthropic_request: dict[str, Any] = {
         "model": openai_request.get("model"),
         "messages": chat_messages,
-        "system": system_messages,
         "max_tokens": openai_request.get("max_tokens", DEFAULT_MAX_TOKENS),
         "stream": True,
-        "metadata": {"user_id": generate_user_id()},
     }
+
+    # 只在用户显式传了 system 消息时设置，否则让 Node.js 注入 Claude Code 系统提示
+    if system_messages:
+        anthropic_request["system"] = system_messages
+
+    # 不设置 metadata，让 Node.js 注入 Claude Code 格式的 user_id
 
     optional_params = {"temperature": "temperature", "top_p": "top_p", "stop": "stop_sequences"}
     for openai_key, anthropic_key in optional_params.items():
@@ -346,7 +364,19 @@ async def chat_completions(request: Request):
 
     openai_request = await request.json()
     anthropic_request = convert_openai_to_anthropic(openai_request)
-    headers = build_headers(account.api_key)
+
+    # 记录完整的客户端请求信息（用于调试）
+    original_headers = dict(request.headers)
+    logger.info("========== 客户端请求详情 ==========")
+    logger.info("[请求头] %s", json.dumps(
+        {k: v for k, v in original_headers.items() if k.lower() not in ("authorization",)},
+        ensure_ascii=False, indent=2
+    ))
+    logger.info("[OpenAI请求] model=%s stream=%s", openai_request.get("model"), openai_request.get("stream"))
+    logger.info("====================================")
+
+    # 构建转发头，透传客户端所有特殊头
+    forwarding_headers = build_forwarding_headers(account.api_key, original_headers)
 
     request_id = generate_request_id()
     model = openai_request.get("model", "unknown")
@@ -361,14 +391,14 @@ async def chat_completions(request: Request):
     if is_stream:
         handler = stream_from_non_stream if use_non_stream_backend else stream_response
         return StreamingResponse(
-            handler(anthropic_request, account, headers, request_id, model),
+            handler(anthropic_request, account, forwarding_headers, request_id, model),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
         )
     else:
         client = get_client()
         try:
-            resp = await client.post(f"{NODE_PROXY_URL}/v1/messages", headers=headers, json=anthropic_request)
+            resp = await client.post(f"{NODE_PROXY_URL}/v1/messages", headers=forwarding_headers, json=anthropic_request)
             if resp.status_code != 200:
                 logger.error("[%s] Error %d", account.name, resp.status_code)
                 raise HTTPException(status_code=resp.status_code, detail=resp.text)
@@ -394,10 +424,11 @@ async def list_models(request: Request):
     if not account:
         raise HTTPException(status_code=401, detail={"error": {"message": "Invalid API key", "type": "authentication_error"}})
 
-    headers = build_headers(account.api_key)
+    original_headers = dict(request.headers)
+    forwarding_headers = build_forwarding_headers(account.api_key, original_headers)
     client = get_client()
     try:
-        resp = await client.get(f"{NODE_PROXY_URL}/v1/models", headers=headers)
+        resp = await client.get(f"{NODE_PROXY_URL}/v1/models", headers=forwarding_headers)
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)
         return {"object": "list", "data": resp.json().get("data", [])}

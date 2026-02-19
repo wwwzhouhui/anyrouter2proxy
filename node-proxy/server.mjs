@@ -10,6 +10,7 @@
  */
 
 import Anthropic from '@anthropic-ai/sdk';
+import crypto from 'crypto';
 import http from 'http';
 import https from 'https';
 import zlib from 'zlib';
@@ -17,6 +18,13 @@ import { CookieJar } from 'tough-cookie';
 
 const PORT = process.env.NODE_PROXY_PORT || 4000;
 const ANTHROPIC_BASE_URL = process.env.ANYROUTER_BASE_URL || 'https://anyrouter.top';
+
+/**
+ * 生成随机十六进制字符串
+ */
+function randomHex(length) {
+  return crypto.randomBytes(Math.ceil(length / 2)).toString('hex').slice(0, length);
+}
 
 // 全局 Cookie Jar，用于存储 WAF cookie
 const cookieJar = new CookieJar();
@@ -299,23 +307,148 @@ function createReadableStream(text) {
 }
 
 /**
+ * 判断模型是否支持 thinking（adaptive 类型）
+ * 不支持的模型：haiku 系列、3.5 系列
+ */
+function supportsThinking(model) {
+  // haiku 系列不支持 adaptive thinking
+  if (/haiku/.test(model)) return false;
+  // 3.5 系列不支持 thinking
+  if (/claude-3-5-/.test(model)) return false;
+  // 其余模型（opus-4-6, sonnet-4-6, sonnet-4-5, opus-4-5, 3-7-sonnet 等）支持
+  return true;
+}
+
+/**
  * 直接使用 HTTPS 调用 API（绕过 SDK 的限制）
  */
-async function callAnthropicApi(apiKey, body, isStream) {
+async function callAnthropicApi(apiKey, body, isStream, clientHeaders = {}) {
   const url = `${ANTHROPIC_BASE_URL}/v1/messages`;
+
+  const model = body.model || '';
+
+  // 根据模型能力注入 thinking 字段（Claude Code 对所有支持 thinking 的模型统一用 adaptive）
+  if (!body.thinking) {
+    if (supportsThinking(model)) {
+      body.thinking = { type: 'adaptive' };
+    }
+    // haiku、3.5 系列等不支持 thinking 的模型不注入
+  }
+  if (!body.metadata) {
+    body.metadata = { user_id: `user_${randomHex(64)}_account__session_${crypto.randomUUID()}` };
+  }
+  if (!body.max_tokens) {
+    if (supportsThinking(model)) {
+      body.max_tokens = 16000;
+    } else {
+      body.max_tokens = 8192;
+    }
+  }
+  // 注入 Claude Code 系统提示（anyrouter 验证请求体必须包含此特征）
+  if (!body.system) {
+    body.system = [
+      {
+        type: 'text',
+        text: 'You are Claude Code, Anthropic\'s official CLI for Claude.',
+        cache_control: { type: 'ephemeral' }
+      },
+      {
+        type: 'text',
+        text: `You are an interactive CLI tool that helps users with software engineering tasks. Use the instructions below and the tools available to you to assist the user.
+
+# Tone and style
+- Only use emojis if the user explicitly requests it. Avoid using emojis in all communication unless asked.
+- Your output will be displayed on a command line interface. Your responses should be short and concise. You can use Github-flavored markdown for formatting, and will be rendered in a monospace font using the CommonMark specification.
+- Output text to communicate with the user; all text you output outside of tool use is displayed to the user. Only use tools to complete tasks. Never use tools like Bash or code comments as means to communicate with the user during the session.
+
+# Doing tasks
+The user will primarily request you perform software engineering tasks. This includes solving bugs, adding new functionality, refactoring code, explaining code, and more.
+
+Here is useful information about the environment you are running in:
+<env>
+Platform: ${process.platform}
+Shell: bash
+</env>`,
+        cache_control: { type: 'ephemeral' }
+      }
+    ];
+  }
 
   const bodyStr = JSON.stringify(body);
 
-  const headers = {
-    'Content-Type': 'application/json',
-    'Content-Length': Buffer.byteLength(bodyStr),
-    'x-api-key': apiKey,
-    'User-Agent': 'anthropic-nodejs/0.71.2',
-    'Accept': isStream ? 'text/event-stream' : 'application/json',
-    // Claude Code 相关头，绕过负载限制
-    'claude-code-attribution-header': '0',
-    'claude-code-disable-nonessential-traffic': '1',
-  };
+  // 需要跳过的 hop-by-hop 头和内部头
+  const skipHeaders = new Set([
+    'host', 'content-length', 'transfer-encoding', 'connection',
+    'keep-alive', 'upgrade', 'accept-encoding',
+  ]);
+
+  // 先从客户端头开始，透传所有特殊头（如 Claude Code 的头）
+  const headers = {};
+  for (const [key, val] of Object.entries(clientHeaders)) {
+    if (!skipHeaders.has(key.toLowerCase())) {
+      headers[key] = val;
+    }
+  }
+
+  // 覆盖/补充关键字段
+  headers['Content-Type'] = 'application/json';
+  delete headers['content-type'];  // 删除小写的，避免重复
+  headers['Content-Length'] = Buffer.byteLength(bodyStr);
+  headers['x-api-key'] = apiKey;
+  headers['Accept'] = isStream ? 'text/event-stream' : 'application/json';
+  delete headers['accept'];  // 删除小写的 accept，避免与 Accept 重复
+
+  // 强制覆盖 User-Agent 为 Claude Code（不论客户端传了什么）
+  delete headers['user-agent'];
+  headers['User-Agent'] = 'claude-cli/2.1.39 (external, cli)';
+  if (!headers['anthropic-version']) {
+    headers['anthropic-version'] = '2023-06-01';
+  }
+  if (!headers['anthropic-beta']) {
+    const betaFlags = ['claude-code-20250219', 'prompt-caching-scope-2026-01-05', 'effort-2025-11-24'];
+    // 只对支持 thinking 的模型添加 adaptive-thinking beta 标记
+    if (supportsThinking(model)) {
+      betaFlags.push('adaptive-thinking-2026-01-28');
+    }
+    headers['anthropic-beta'] = betaFlags.join(',');
+  }
+  if (!headers['x-app']) {
+    headers['x-app'] = 'cli';
+  }
+  if (!headers['anthropic-dangerous-direct-browser-access']) {
+    headers['anthropic-dangerous-direct-browser-access'] = 'true';
+  }
+  if (!headers['claude-code-attribution-header']) {
+    headers['claude-code-attribution-header'] = '0';
+  }
+  if (!headers['claude-code-disable-nonessential-traffic']) {
+    headers['claude-code-disable-nonessential-traffic'] = '1';
+  }
+  // x-stainless SDK 指纹头
+  if (!headers['x-stainless-lang']) {
+    headers['x-stainless-lang'] = 'js';
+    headers['x-stainless-package-version'] = '0.73.0';
+    headers['x-stainless-os'] = 'Windows';
+    headers['x-stainless-arch'] = 'x64';
+    headers['x-stainless-runtime'] = 'node';
+    headers['x-stainless-runtime-version'] = process.version;
+    headers['x-stainless-retry-count'] = '0';
+    headers['x-stainless-timeout'] = '600';
+  }
+  if (!headers['sec-fetch-mode']) {
+    headers['sec-fetch-mode'] = 'cors';
+  }
+  if (!headers['accept-language']) {
+    headers['accept-language'] = '*';
+  }
+
+  // 移除 authorization 避免冲突
+  delete headers['authorization'];
+
+  console.log('[转发头]', JSON.stringify(
+    Object.fromEntries(Object.entries(headers).filter(([k]) => k.toLowerCase() !== 'x-api-key')),
+    null, 2
+  ));
 
   const response = await fetchWithWafHandling(url, { method: 'POST', headers }, bodyStr);
 
@@ -339,7 +472,7 @@ async function handleMessages(req, res, body) {
   console.log(`[${new Date().toISOString()}] ${body.model} stream=${isStream} key=${apiKey.substring(0, 10)}...`);
 
   try {
-    const response = await callAnthropicApi(apiKey, body, isStream);
+    const response = await callAnthropicApi(apiKey, body, isStream, req.headers);
 
     // 检查响应是否仍然是 WAF 页面
     if (isWafChallenge(response.text)) {

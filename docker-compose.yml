@@ -65,7 +65,6 @@ services:
       - HTTP_TIMEOUT=${HTTP_TIMEOUT:-120}
       - DEFAULT_MAX_TOKENS=${DEFAULT_MAX_TOKENS:-8192}
       - FORCE_NON_STREAM=${FORCE_NON_STREAM:-false}
-      - DEFAULT_SYSTEM_PROMPT=${DEFAULT_SYSTEM_PROMPT:-You are Claude, a helpful AI assistant.}
     ports:
       - "9999:9999"
     healthcheck:
