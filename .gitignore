@@ -19,6 +19,8 @@ conf_anthropic202512122.yaml
 anthropic_client2.py
 anthropic_client3.py
 .env
+.env.backup.*
+*.env.backup.*
 .ipynb_checkpoints/test_openai_proxy-checkpoint.py
 anyrouter2anthropic_agentrouter.py
 .env.example.agentrouter

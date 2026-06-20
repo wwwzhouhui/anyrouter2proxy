@@ -76,6 +76,39 @@ services:
     networks:
       - anyrouter-proxy
 
+  # Codex Responses API 代理服务（直连 AnyRouter OpenAI 兼容端点）
+  codex-proxy:
+    image: wwwzhouhui569/anyrouter2proxy:codex-local
+    container_name: anyrouter-codex-proxy
+    restart: unless-stopped
+    environment:
+      - RUN_MODE=codex
+      - CODEX_PROXY_PORT=${CODEX_PROXY_PORT:-9996}
+      - HOST=0.0.0.0
+      - HTTP_TIMEOUT=${HTTP_TIMEOUT:-300}
+      - ANYROUTER_OPENAI_BASE_URL=${ANYROUTER_OPENAI_BASE_URL:-https://anyrouter.top/v1}
+      - ANYROUTER_API_KEY=${ANYROUTER_API_KEY:-}
+      - PROXY_API_KEY=${PROXY_API_KEY:-}
+      - CODEX_PROXY_MODEL=${CODEX_PROXY_MODEL:-gpt-5.5}
+      - CODEX_PROXY_FORCE_MODEL=${CODEX_PROXY_FORCE_MODEL:-false}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-fPKtohl3ofQwFP6ThJVy}
+      - ADMIN_TOKEN_SECRET=${ADMIN_TOKEN_SECRET:-}
+      - ADMIN_TOKEN_TTL_SECONDS=${ADMIN_TOKEN_TTL_SECONDS:-86400}
+      - ENV_FILE_PATH=/app/config/.env
+    volumes:
+      - /home/app/anyrouter2proxy/.env:/app/config/.env
+    ports:
+      - "9996:9996"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9996/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - anyrouter-proxy
+
 networks:
   anyrouter-proxy:
     driver: bridge
