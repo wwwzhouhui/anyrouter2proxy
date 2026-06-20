@@ -258,6 +258,12 @@ print(response.content[0].text)
 
 ---
 
+### web管理
+
+访问地址http://127.0.0.1:9996/admin
+
+![image-20260620235830578](https://mypicture-1258720957.cos.ap-nanjing.myqcloud.com/Obsidian/image-20260620235830578.png)
+
 ## 配置说明
 
 ### 环境变量
